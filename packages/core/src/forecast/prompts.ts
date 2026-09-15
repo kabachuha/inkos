@@ -1,7 +1,7 @@
 // Bilingual prompt builders for the narrative forecast agent, organized the
 // same way as prompts/short-fiction.ts: each builder switches on language.
 
-export type ForecastLanguage = "zh" | "en";
+export type ForecastLanguage = "zh" | "en" | "ru";
 
 export interface ForecastPromptInput {
   readonly contextMarkdown: string;
@@ -21,6 +21,17 @@ export function buildForecastSystemPrompt(language: ForecastLanguage): string {
       "- Branches are planning material, not prose: beats describe what happens, not scene-level detail.",
       "- Respect canon: every projection must stay consistent with established facts, character locks, and world rules; any necessary conflict must be listed under risks.",
       "- Output exactly one JSON object. No explanations, no markdown headings, no code fences.",
+    ].join("\n");
+  }
+  if (language === "ru") {
+    return [
+      "Вы — ассистент по нарративным прогнозам для романа большого формата.",
+      "Задача: исходя из канонического контекста и точки расхождения, заданной автором, просчитать несколько взаимоотделённых неканонических кандидатных будущих сценариев для сравнения автором.",
+      "Правила:",
+      "- Ветви взаимоисключающи: каждая предполагает своё разрешение точки расхождения и не должна ссылаться на соседние ветви или зависеть от них.",
+      "- Ветви — это планировочный материал, а не проза: биты описывают, что происходит, без сценических деталей.",
+      "- Уважайте канон: все прогнозы должны оставаться согласованными с установленными фактами, персональными локами и правилами мира; любые необходимые конфликты должны быть вынесены в risks.",
+      "- Выведите ровно один JSON-объект. Без пояснений, markdown-заголовков и кодовых оград.",
     ].join("\n");
   }
   return [
@@ -51,6 +62,21 @@ export function buildForecastUserPrompt(input: ForecastPromptInput, language: Fo
       forecastJsonShape(firstChapter, "en"),
     ].join("\n");
   }
+  if (language === "ru") {
+    return [
+      input.contextMarkdown,
+      "",
+      "## Точка расхождения",
+      "",
+      input.divergence,
+      "",
+      "## Требования к выводу",
+      "",
+      `Сгенерируйте ровно ${input.branchCount} кандидатных ветвей. Каждая ветвь покрывает примерно ${input.horizon} будущих глав, начиная с главы ${firstChapter}.`,
+      "Верните JSON со следующей структурой (имена полей должны совпадать):",
+      forecastJsonShape(firstChapter, "ru"),
+    ].join("\n");
+  }
   return [
     input.contextMarkdown,
     "",
@@ -71,6 +97,12 @@ export function buildForecastRepairPrompt(validationError: string, language: For
     return [
       `Your previous output failed validation: ${validationError}`,
       "Re-output the complete JSON object only, fixing the problem above. No explanations, no code fences.",
+    ].join("\n");
+  }
+  if (language === "ru") {
+    return [
+      `Ваш предыдущий вывод не прошёл валидацию: ${validationError}`,
+      "Выведите снова только полный JSON-объект, исправив указанную проблему. Без пояснений и кодовых оград.",
     ].join("\n");
   }
   return [
@@ -98,6 +130,29 @@ function forecastJsonShape(firstChapter: number, language: ForecastLanguage): st
       '      "risks": [{ "kind": "continuity|causality|character", "description": "consistency risk" }],',
       '      "uncertainties": ["open uncertainties"],',
       '      "intentAlignment": { "score": integer 0-100, "rationale": "how well this matches the author intent and current focus" }',
+      "    }",
+      "  ]",
+      "}",
+    ].join("\n");
+  }
+  if (language === "ru") {
+    return [
+      "{",
+      '  "branches": [',
+      "    {",
+      '      "title": "краткое название ветви",',
+      '      "premise": "допущение этой ветви о точке расхождения",',
+      `      "beats": [{ "chapter": целое номер главы, начиная с ${firstChapter}, "summary": "что происходит в этой главе" }],`,
+      '      "characterDecisions": [{ "character": "имя персонажа", "decision": "ключевое решение этого персонажа" }],',
+      '      "projectedChanges": {',
+      '        "characters": ["предполагаемые изменения состояний персонажей"],',
+      '        "relationships": ["предполагаемые изменения отношений"],',
+      '        "world": ["предполагаемые изменения мира/сил"],',
+      '        "hooks": ["какие интриги продвигаются, срабатывают или разрушаются"]',
+      "      },",
+      '      "risks": [{ "kind": "continuity|causality|character", "description": "риск согласованности" }],',
+      '      "uncertainties": ["открытые неопределённости"],',
+      '      "intentAlignment": { "score": целое число 0-100, "rationale": "насколько это соответствует замыслу автора и текущему фокусу" }',
       "    }",
       "  ]",
       "}",

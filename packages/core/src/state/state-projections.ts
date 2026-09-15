@@ -14,7 +14,7 @@ import {
 
 export function renderHooksProjection(
   state: HooksState,
-  language: "zh" | "en" = "zh",
+  language: "zh" | "en" | "ru" = "zh",
   options?: { readonly currentChapter?: number },
 ): string {
   const title = language === "en" ? "# Pending Hooks" : "# 伏笔池";
@@ -71,12 +71,12 @@ export function renderHooksProjection(
   return [title, "", ...headers, ...rows, ""].join("\n");
 }
 
-function renderDependsOnCell(ids: ReadonlyArray<string>, language: "zh" | "en"): string {
+function renderDependsOnCell(ids: ReadonlyArray<string>, language: "zh" | "en" | "ru"): string {
   if (ids.length === 0) return language === "en" ? "none" : "无";
   return `[${ids.join(", ")}]`;
 }
 
-function renderCoreHookCell(isCore: boolean, language: "zh" | "en"): string {
+function renderCoreHookCell(isCore: boolean, language: "zh" | "en" | "ru"): string {
   if (language === "en") return isCore ? "true" : "false";
   return isCore ? "是" : "否";
 }
@@ -86,26 +86,32 @@ function renderHalfLifeCell(value: number | undefined): string {
   return String(Math.trunc(value));
 }
 
-function renderPromotedCell(value: boolean | undefined, language: "zh" | "en"): string {
+function renderPromotedCell(value: boolean | undefined, language: "zh" | "en" | "ru"): string {
   if (value === undefined) return "";
   if (language === "en") return value ? "true" : "false";
+  if (language === "ru") return value ? "да" : "нет";
   return value ? "是" : "否";
 }
 
 export function renderChapterSummariesProjection(
   state: ChapterSummariesState,
-  language: "zh" | "en" = "zh",
+  language: "zh" | "en" | "ru" = "zh",
 ): string {
-  const title = language === "en" ? "# Chapter Summaries" : "# 章节摘要";
+  const title = language === "en" ? "# Chapter Summaries" : language === "ru" ? "# Резюме глав" : "# 章节摘要";
   const headers = language === "en"
     ? [
       "| Chapter | Title | Characters | Key Events | State Changes | Hook Activity | Mood | Chapter Type |",
       "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
-    : [
-      "| 章节 | 标题 | 出场人物 | 关键事件 | 状态变化 | 伏笔动态 | 情绪基调 | 章节类型 |",
-      "| --- | --- | --- | --- | --- | --- | --- | --- |",
-    ];
+    : language === "ru"
+      ? [
+        "| Глава | Название | Персонажи | Ключевые события | Изменения состояния | Динамика крючков | Настроение | Тип главы |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+      ]
+      : [
+        "| 章节 | 标题 | 出场人物 | 关键事件 | 状态变化 | 伏笔动态 | 情绪基调 | 章节类型 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+      ];
 
   const rows = [...state.rows]
     .sort((left, right) => left.chapter - right.chapter)
@@ -127,7 +133,7 @@ export function renderChapterSummariesProjection(
 
 export function renderCurrentStateProjection(
   state: CurrentStateState,
-  language: "zh" | "en" = "zh",
+  language: "zh" | "en" | "ru" = "zh",
 ): string {
   const layout = language === "en"
     ? {

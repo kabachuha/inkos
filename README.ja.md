@@ -27,7 +27,7 @@
 [ByteDance Volcano Engine](https://www.volcengine.com/activity/ai618?utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_term=inkos&utm_content=hw) の本プロジェクトへのスポンサー支援に感謝します。Volcano Ark の Agent/Coding Plan は初回購入 CNY 9.9 から利用でき、GLM-5.3、Kimi-K3、DeepSeek、MiniMax、Doubao などに対応します。新規登録では、コーディングと Agent 開発に使える 2,500 万 Token が無料で提供され、統一 API から利用できます。[今すぐ始める →](https://www.volcengine.com/activity/ai618?utm_source=OWO&utm_medium=devrel-1&utm_campaign=hw&utm_term=inkos&utm_content=hw)
 
 <p align="center">
-  <a href="README.md">中文</a> | <a href="README.en.md">English</a> | 日本語
+  <a href="README.md">中文</a> | <a href="README.en.md">English</a> | 日本語 | <a href="README.ru.md">Русский</a>
 </p>
 
 ---

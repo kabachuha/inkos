@@ -19,16 +19,18 @@ export interface AITellResult {
   readonly issues: ReadonlyArray<AITellIssue>;
 }
 
-type AITellLanguage = "zh" | "en";
+type AITellLanguage = "zh" | "en" | "ru";
 
 const HEDGE_WORDS: Record<AITellLanguage, ReadonlyArray<string>> = {
   zh: ["似乎", "可能", "或许", "大概", "某种程度上", "一定程度上", "在某种意义上"],
   en: ["seems", "seemed", "perhaps", "maybe", "apparently", "in some ways", "to some extent"],
+  ru: ["кажется", "возможно", "может быть", "по-видимому", "в некотором роде", "в какой-то степени", "скорее всего"],
 };
 
 const TRANSITION_WORDS: Record<AITellLanguage, ReadonlyArray<string>> = {
   zh: ["然而", "不过", "与此同时", "另一方面", "尽管如此", "话虽如此", "但值得注意的是"],
   en: ["however", "meanwhile", "on the other hand", "nevertheless", "even so", "still"],
+  ru: ["однако", "вместе с тем", "с другой стороны", "тем не менее", "при этом", "несмотря на это"],
 };
 
 /**

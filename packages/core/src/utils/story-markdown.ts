@@ -8,7 +8,7 @@ import {
 
 export function renderSummarySnapshot(
   summaries: ReadonlyArray<StoredSummary>,
-  language: "zh" | "en" = "zh",
+  language: "zh" | "en" | "ru" = "zh",
 ): string {
   if (summaries.length === 0) return "- none";
 
@@ -17,10 +17,15 @@ export function renderSummarySnapshot(
       "| chapter | title | characters | events | stateChanges | hookActivity | mood | chapterType |",
       "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
-    : [
-      "| 章节 | 标题 | 出场人物 | 关键事件 | 状态变化 | 伏笔动态 | 情绪基调 | 章节类型 |",
-      "| --- | --- | --- | --- | --- | --- | --- | --- |",
-    ];
+    : language === "ru"
+      ? [
+        "| глава | название | персонажи | события | изменения_состояния | динамика_крючков | эмоциональный_фон | тип_главы |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+      ]
+      : [
+        "| 章节 | 标题 | 出场人物 | 关键事件 | 状态变化 | 伏笔动态 | 情绪基调 | 章节类型 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+      ];
 
   return [
     ...headers,
@@ -39,7 +44,7 @@ export function renderSummarySnapshot(
 
 export function renderHookSnapshot(
   hooks: ReadonlyArray<StoredHook>,
-  language: "zh" | "en" = "zh",
+  language: "zh" | "en" | "ru" = "zh",
 ): string {
   if (hooks.length === 0) return "- none";
 
@@ -48,10 +53,15 @@ export function renderHookSnapshot(
       "| hook_id | start_chapter | type | status | last_advanced | expected_payoff | payoff_timing | depends_on | pays_off_in_arc | core_hook | half_life | promoted | notes |",
       "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
-    : [
-      "| hook_id | 起始章节 | 类型 | 状态 | 最近推进 | 预期回收 | 回收节奏 | 上游依赖 | 回收卷 | 核心 | 半衰期 | 升级 | 备注 |",
-      "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-    ];
+    : language === "ru"
+      ? [
+        "| hook_id | стартовая_глава | тип | статус | последнее_продвижение | ожидаемое_раскрытие | темп_раскрытия | зависит_от | открывается_в_арке | ключевой | период_полураспада | продвинуто | примечания |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+      ]
+      : [
+        "| hook_id | 起始章节 | 类型 | 状态 | 最近推进 | 预期回收 | 回收节奏 | 上游依赖 | 回收卷 | 核心 | 半衰期 | 升级 | 备注 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+      ];
 
   return [
     ...headers,
@@ -78,20 +88,20 @@ function renderHalfLifeCell(value: number | undefined): string {
   return String(Math.trunc(value));
 }
 
-function renderPromotedCell(value: boolean | undefined, language: "zh" | "en"): string {
+function renderPromotedCell(value: boolean | undefined, language: "zh" | "en" | "ru"): string {
   if (value === undefined) return "";
-  if (language === "en") return value ? "true" : "false";
-  return value ? "是" : "否";
+  if (language === "zh") return value ? "是" : "否";
+  return value ? "true" : "false";
 }
 
-function renderDependsOnCell(ids: ReadonlyArray<string>, language: "zh" | "en"): string {
-  if (ids.length === 0) return language === "en" ? "none" : "无";
+function renderDependsOnCell(ids: ReadonlyArray<string>, language: "zh" | "en" | "ru"): string {
+  if (ids.length === 0) return language === "zh" ? "无" : "none";
   return `[${ids.join(", ")}]`;
 }
 
-function renderCoreHookCell(isCore: boolean, language: "zh" | "en"): string {
-  if (language === "en") return isCore ? "true" : "false";
-  return isCore ? "是" : "否";
+function renderCoreHookCell(isCore: boolean, language: "zh" | "en" | "ru"): string {
+  if (language === "zh") return isCore ? "是" : "否";
+  return isCore ? "true" : "false";
 }
 
 export function parseChapterSummariesMarkdown(markdown: string): StoredSummary[] {

@@ -32,14 +32,24 @@ export class FoundationReviewerAgent extends BaseAgent {
     readonly mode: "original" | "fanfic" | "series";
     readonly sourceCanon?: string;
     readonly styleGuide?: string;
-    readonly language: "zh" | "en";
+    readonly language: "zh" | "en" | "ru";
     readonly targetChapters?: number;
   }): Promise<FoundationReviewResult> {
+    const canonLabel = params.language === "en"
+      ? "Source canon reference"
+      : params.language === "ru"
+        ? "Референс канона первоисточника"
+        : "原作正典参照";
+    const styleLabel = params.language === "en"
+      ? "Source style reference"
+      : params.language === "ru"
+        ? "Референс стиля первоисточника"
+        : "原作风格参照";
     const canonBlock = params.sourceCanon
-      ? `\n## 原作正典参照\n${params.sourceCanon}\n`
+      ? `\n## ${canonLabel}\n${params.sourceCanon}\n`
       : "";
     const styleBlock = params.styleGuide
-      ? `\n## 原作风格参照\n${params.styleGuide}\n`
+      ? `\n## ${styleLabel}\n${params.styleGuide}\n`
       : "";
 
     const dimensions = params.mode === "original"
@@ -48,7 +58,9 @@ export class FoundationReviewerAgent extends BaseAgent {
 
     const systemPrompt = params.language === "en"
       ? this.buildEnglishReviewPrompt(dimensions, canonBlock, styleBlock)
-      : this.buildChineseReviewPrompt(dimensions, canonBlock, styleBlock);
+      : params.language === "ru"
+        ? this.buildRussianReviewPrompt(dimensions, canonBlock, styleBlock)
+        : this.buildChineseReviewPrompt(dimensions, canonBlock, styleBlock);
 
     const userPrompt = this.buildFoundationExcerpt(params.foundation, params.language);
 
@@ -60,7 +72,7 @@ export class FoundationReviewerAgent extends BaseAgent {
     return this.parseReviewResult(response.content, dimensions);
   }
 
-  private originalDimensions(language: "zh" | "en", targetChapters?: number): ReadonlyArray<string> {
+  private originalDimensions(language: "zh" | "en" | "ru", targetChapters?: number): ReadonlyArray<string> {
     const target = Number.isFinite(targetChapters) && targetChapters && targetChapters > 0
       ? Math.round(targetChapters)
       : 40;
@@ -74,19 +86,27 @@ export class FoundationReviewerAgent extends BaseAgent {
           "Character Differentiation (Are the main characters distinct in voice and motivation?)",
           `Pacing Feasibility (Does the outline fit the requested ${target} chapters and avoid repeating the same beat for ${repeatWindow} chapters?)`,
         ]
-      : [
-          `核心冲突（是否有清晰且有足够张力的核心冲突支撑用户要求的${target}章？）`,
-          `开篇节奏（前${openingWindow}章能否形成翻页驱动力？）`,
-          "世界一致性（世界观是否内洽且具体？）",
-          "角色区分度（主要角色的声音和动机是否各不相同？）",
-          `节奏可行性（大纲是否适配用户要求的${target}章，并避免连续${repeatWindow}章同一种节拍？）`,
-        ];
+      : language === "ru"
+        ? [
+            `Центральный конфликт (есть ли ясное, цепляющее центральное напряжение, способное удержать требуемые ${target} глав?)`,
+            `Драйвер начала (создают ли первые ${openingWindow} глав эффект «хочется листать дальше»?)`,
+            "Целостность мира (внутренне согласована ли и конкретна ли система мира?)",
+            "Различимость героев (отличаются ли основные персонажи по голосу и мотивации?)",
+            `Фактичность темпа (вписывается ли план в требуемые ${target} глав и избегает одного и того же бита ${repeatWindow} глав подряд?)`,
+          ]
+        : [
+            `核心冲突（是否有清晰且有足够张力的核心冲突支撑用户要求的${target}章？）`,
+            `开篇节奏（前${openingWindow}章能否形成翻页驱动力？）`,
+            "世界一致性（世界观是否内洽且具体？）",
+            "角色区分度（主要角色的声音和动机是否各不相同？）",
+            `节奏可行性（大纲是否适配用户要求的${target}章，并避免连续${repeatWindow}章同一种节拍？）`,
+          ];
   }
 
-  private derivativeDimensions(language: "zh" | "en", mode: "fanfic" | "series"): ReadonlyArray<string> {
+  private derivativeDimensions(language: "zh" | "en" | "ru", mode: "fanfic" | "series"): ReadonlyArray<string> {
     const modeLabel = mode === "fanfic"
-      ? (language === "en" ? "Fan Fiction" : "同人")
-      : (language === "en" ? "Series" : "系列");
+      ? (language === "en" ? "Fan Fiction" : language === "ru" ? "фанфик" : "同人")
+      : (language === "en" ? "Series" : language === "ru" ? "серия" : "系列");
 
     return language === "en"
       ? [
@@ -96,13 +116,21 @@ export class FoundationReviewerAgent extends BaseAgent {
           "Opening Momentum (Can the first 5 chapters create a page-turning hook without requiring 3 chapters of setup?)",
           `Pacing Feasibility (Does the outline avoid the trap of re-walking the original's plot beats?)`,
         ]
-      : [
-          `原作DNA保留（${modeLabel}是否尊重原作的世界规则、角色性格、已确立事实？）`,
-          `新叙事空间（是否有明确的分岔点或新领域，让故事有原创空间，而非复述原作？）`,
-          "核心冲突（新故事的核心冲突是否有足够张力且区别于原作？）",
-          "开篇节奏（前5章能否形成翻页驱动力，不需要3章铺垫？）",
-          `节奏可行性（卷纲是否避免了重走原作剧情节拍的陷阱？）`,
-        ];
+      : language === "ru"
+        ? [
+            `Сохранение ДНК первоисточника (уважает ли ${modeLabel} правила мира, характеры персонажей и установленные факты оригинала?)`,
+            "Новое нарративное пространство (есть ли ясная точка разветвления или новая территория, дающая истории право быть ОРИГИНАЛЬНОЙ, а не пересказом?)",
+            "Центральный конфликт (напряжён ли конфликт новой истории и отличается ли он от оригинала?)",
+            "Драйвер начала (создают ли первые 5 глав эффект «хочется листать дальше» без 3 глав завязки?)",
+            "Фактичность темпа (избегает ли план ловушки повторного прохода по битам сюжета оригинала?)",
+          ]
+        : [
+            `原作DNA保留（${modeLabel}是否尊重原作的世界规则、角色性格、已确立事实？）`,
+            `新叙事空间（是否有明确的分岔点或新领域，让故事有原创空间，而非复述原作？）`,
+            "核心冲突（新故事的核心冲突是否有足够张力且区别于原作？）",
+            "开篇节奏（前5章能否形成翻页驱动力，不需要3章铺垫？）",
+            `节奏可行性（卷纲是否避免了重走原作剧情节拍的陷阱？）`,
+          ];
   }
 
   private buildChineseReviewPrompt(
@@ -177,10 +205,48 @@ ${canonBlock}${styleBlock}
 Be strict. 80 means "ready to write without changes."`;
   }
 
-  private buildFoundationExcerpt(foundation: ArchitectOutput, language: "zh" | "en"): string {
+  private buildRussianReviewPrompt(
+    dimensions: ReadonlyArray<string>,
+    canonBlock: string,
+    styleBlock: string,
+  ): string {
+    return `Вы — опытный редактор-профессионал, рецензирующий фундамент новой книги (система мира + план + правила).
+
+Оцените каждое измерение (0-100) с конкретным фидбеком:
+
+${dimensions.map((dim, i) => `${i + 1}. ${dim}`).join("\n")}
+
+## Критерии оценки
+- 80+ Прошло — можно начинать писать
+- 60-79 Нужна доработка
+- <60 Фундаментальная проблема направления
+
+## Формат вывода (строго)
+=== DIMENSION: 1 ===
+Оценка: {0-100}
+Отзыв: {конкретный фидбек}
+
+=== DIMENSION: 2 ===
+Оценка: {0-100}
+Отзыв: {конкретный фидбек}
+
+...
+
+=== OVERALL ===
+Итог: {взвешенное среднее}
+Принят: {да/нет}
+Общий вывод: {1-2 абзаца — главная проблема и лучшее качество}
+${canonBlock}${styleBlock}
+
+Будьте строги. 80 означает «можно писать без правок».`;
+  }
+
+  private buildFoundationExcerpt(foundation: ArchitectOutput, language: "zh" | "en" | "ru"): string {
     return language === "en"
       ? `## Story Bible\n${foundation.storyBible}\n\n## Volume Outline\n${foundation.volumeOutline}\n\n## Book Rules\n${foundation.bookRules}\n\n## Initial State\n${foundation.currentState}\n\n## Initial Hooks\n${foundation.pendingHooks}`
-      : `## 世界设定\n${foundation.storyBible}\n\n## 卷纲\n${foundation.volumeOutline}\n\n## 规则\n${foundation.bookRules}\n\n## 初始状态\n${foundation.currentState}\n\n## 初始伏笔\n${foundation.pendingHooks}`;
+      : language === "ru"
+        ? `## Библия истории\n${foundation.storyBible}\n\n## План по томам\n${foundation.volumeOutline}\n\n## Правила книги\n${foundation.bookRules}\n\n## Начальное состояние\n${foundation.currentState}\n\n## Начальные крючки\n${foundation.pendingHooks}`
+        : `## 世界设定\n${foundation.storyBible}\n\n## 卷纲\n${foundation.volumeOutline}\n\n## 规则\n${foundation.bookRules}\n\n## 初始状态\n${foundation.currentState}\n\n## 初始伏笔\n${foundation.pendingHooks}`;
   }
 
   private parseReviewResult(
@@ -192,7 +258,7 @@ Be strict. 80 means "ready to write without changes."`;
 
     for (let i = 0; i < dimensions.length; i++) {
       const regex = new RegExp(
-        `=== DIMENSION: ${i + 1} ===\\s*[\\s\\S]*?(?:分数|Score)[：:]\\s*(\\d+)[\\s\\S]*?(?:意见|Feedback)[：:]\\s*([\\s\\S]*?)(?==== |$)`,
+        `=== DIMENSION: ${i + 1} ===\\s*[\\s\\S]*?(?:分数|Score|Оценка)[：:]\\s*(\\d+)[\\s\\S]*?(?:意见|Feedback|Отзыв)[：:]\\s*([\\s\\S]*?)(?==== |$)`,
       );
       const match = content.match(regex);
       if (!match) {
@@ -217,7 +283,7 @@ Be strict. 80 means "ready to write without changes."`;
     const passed = totalScore >= PASS_THRESHOLD && !anyBelowFloor;
 
     const overallMatch = content.match(
-      /=== OVERALL ===[\s\S]*?(?:总评|Summary)[：:]\s*([\s\S]*?)$/,
+      /=== OVERALL ===[\s\S]*?(?:总评|Summary|Общий вывод)[：:]\s*([\s\S]*?)$/,
     );
     const overallFeedback = overallMatch ? overallMatch[1]!.trim() : "(parse failed)";
 

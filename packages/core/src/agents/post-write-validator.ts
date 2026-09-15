@@ -18,10 +18,10 @@ export interface PostWriteViolation {
 
 export function normalizePostWriteSurface(
   content: string,
-  languageOverride?: "zh" | "en",
+  languageOverride?: "zh" | "en" | "ru",
 ): string {
   let normalized = stripPostWriteMetaLines(content);
-  if (languageOverride !== "en") {
+  if (languageOverride === "zh") {
     normalized = normalized.replace(/——+/g, "，");
   }
   return normalized.trimEnd();
@@ -82,15 +82,18 @@ export function validatePostWrite(
   content: string,
   genreProfile: GenreProfile,
   bookRules: BookRules | null,
-  languageOverride?: "zh" | "en",
+  languageOverride?: "zh" | "en" | "ru",
 ): ReadonlyArray<PostWriteViolation> {
   const violations: PostWriteViolation[] = [];
 
-  // Skip Chinese-specific rules for English content
-  const isEnglish = (languageOverride ?? genreProfile.language) === "en";
-  if (isEnglish) {
+  // Skip Chinese-specific rules for English / Russian content
+  const resolvedLanguage = languageOverride ?? genreProfile.language;
+  if (resolvedLanguage === "en") {
     // For English, only run book-specific prohibitions and paragraph length check
     return validatePostWriteEnglish(content, genreProfile, bookRules);
+  }
+  if (resolvedLanguage === "ru") {
+    return validatePostWriteRussian(content, genreProfile, bookRules);
   }
 
   // 1. 硬性禁令: "不是…而是…" 句式
@@ -191,14 +194,10 @@ export function validatePostWrite(
   if (chapterRefs && chapterRefs.length > 0) {
     const unique = [...new Set(chapterRefs)];
     violations.push({
-      rule: isEnglish ? "chapter-number-reference" : "章节号指称",
+      rule: "章节号指称",
       severity: "error",
-      description: isEnglish
-        ? `Chapter text contains explicit chapter number references: ${unique.map(r => `"${r}"`).join(", ")}. Characters do not know they are in a numbered chapter.`
-        : `正文中出现了章节号指称：${unique.map(r => `"${r}"`).join("、")}。角色不知道自己在第几章。`,
-      suggestion: isEnglish
-        ? "Replace with natural references: 'that night', 'when the warehouse burned', 'the incident at the dock'"
-        : '改成自然表达："那天晚上"、"仓库出事那次"、"码头上的事"',
+      description: `正文中出现了章节号指称：${unique.map(r => `"${r}"`).join("、")}。角色不知道自己在第几章。`,
+      suggestion: '改成自然表达："那天晚上"、"仓库出事那次"、"码头上的事"',
     });
   }
 
@@ -354,16 +353,21 @@ function detectFirstPersonInnerStateSlip(content: string): string | null {
 export function detectCrossChapterRepetition(
   currentContent: string,
   recentChaptersContent: string,
-  language: "zh" | "en" = "zh",
+  language: "zh" | "en" | "ru" = "zh",
 ): ReadonlyArray<PostWriteViolation> {
   if (!recentChaptersContent || recentChaptersContent.length < 100) return [];
 
   const violations: PostWriteViolation[] = [];
   const isEnglish = language === "en";
+  const isRussian = language === "ru";
 
-  if (isEnglish) {
+  if (isEnglish || isRussian) {
     // Extract 3-word phrases from current chapter
-    const words = currentContent.toLowerCase().replace(/[^\w\s']/g, "").split(/\s+/).filter(w => w.length > 2);
+    const words = currentContent
+      .toLowerCase()
+      .replace(isRussian ? /[^\p{L}\p{N}\s'-]/gu : /[^\w\s']/g, "")
+      .split(/\s+/)
+      .filter(w => w.length > 2);
     const phraseCounts = new Map<string, number>();
     for (let i = 0; i < words.length - 2; i++) {
       const phrase = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
@@ -378,12 +382,21 @@ export function detectCrossChapterRepetition(
       }
     }
     if (crossRepeats.length >= 3) {
-      violations.push({
-        rule: "Cross-chapter repetition",
-        severity: "warning",
-        description: `${crossRepeats.length} repeated phrases also found in recent chapters: ${crossRepeats.slice(0, 5).join(", ")}`,
-        suggestion: "Vary action verbs and descriptive phrases to avoid cross-chapter repetition",
-      });
+      violations.push(
+        isEnglish
+          ? {
+              rule: "Cross-chapter repetition",
+              severity: "warning",
+              description: `${crossRepeats.length} repeated phrases also found in recent chapters: ${crossRepeats.slice(0, 5).join(", ")}`,
+              suggestion: "Vary action verbs and descriptive phrases to avoid cross-chapter repetition",
+            }
+          : {
+              rule: "Cross-chapter repetition",
+              severity: "warning",
+              description: `${crossRepeats.length} повторяющихся фраз также найдены в последних главах: ${crossRepeats.slice(0, 5).join(", ")}`,
+              suggestion: "Варируйте глаголы действия и описательные обороты, чтобы избежать межглавного повторения",
+            },
+      );
     }
   } else {
     // Chinese: 6-char ngrams
@@ -418,7 +431,7 @@ export function detectCrossChapterRepetition(
 export function detectParagraphLengthDrift(
   currentContent: string,
   recentChaptersContent: string,
-  language: "zh" | "en" = "zh",
+  language: "zh" | "en" | "ru" = "zh",
 ): ReadonlyArray<PostWriteViolation> {
   if (!recentChaptersContent || recentChaptersContent.trim().length === 0) return [];
 
@@ -445,12 +458,19 @@ export function detectParagraphLengthDrift(
           description: `Average paragraph length dropped from ${Math.round(recent.averageLength)} to ${Math.round(current.averageLength)} characters (${dropPercent}% shorter) compared with recent chapters.`,
           suggestion: "Let action, observation, and reaction share paragraphs more often instead of cutting every beat into a single short line.",
         }
-      : {
-          rule: "段落密度漂移",
-          severity: "warning",
-          description: `当前章平均段长从近期章节的${Math.round(recent.averageLength)}字降到${Math.round(current.averageLength)}字，缩短了${dropPercent}%。`,
-          suggestion: "不要把每个动作都切成单独短句；适当把动作、观察和反应并入同一段，恢复段落层次。",
-        },
+      : language === "ru"
+        ? {
+            rule: "Paragraph density drift",
+            severity: "warning",
+            description: `Средняя длина абзаца упала с ${Math.round(recent.averageLength)} до ${Math.round(current.averageLength)} символов (на ${dropPercent}% короче) по сравнению с последними главами.`,
+            suggestion: "Чаще объединяйте действие, наблюдение и реакцию в общие абзацы, а не режьте каждый такт в отдельную короткую строку.",
+          }
+        : {
+            rule: "段落密度漂移",
+            severity: "warning",
+            description: `当前章平均段长从近期章节的${Math.round(recent.averageLength)}字降到${Math.round(current.averageLength)}字，缩短了${dropPercent}%。`,
+            suggestion: "不要把每个动作都切成单独短句；适当把动作、观察和反应并入同一段，恢复段落层次。",
+          },
   ];
 }
 
@@ -540,10 +560,121 @@ function validatePostWriteEnglish(
   return violations;
 }
 
+/** Russian AI-tell / sermon markers (multi-word phrases included). */
+const RU_AI_TELL_PHRASES = [
+  "очевидно", "безусловно", "неоспоримо", "как известно", "стоит отметить",
+  "на первый взгляд", "казалось бы", "без преувеличения", "невольно",
+  "с трудом верилось",
+];
+
+const RU_COLLECTIVE_SHOCK_PATTERNS = [
+  /(?:вся|весь|все|всеми|всех)\s+(?:толпа|комната|зала|компании|присутствующие|собравшиеся|гости)[^。！？!.?\n]{0,20}(?:замерла|затаила|ахнула|притихла|вздохнула)/i,
+  /(?:всех|весь|вся)\s+(?:присутствующих|собравшихся|зрителей)[^。！？!.?\n]{0,20}?(?:обступили|окружили)/i,
+];
+
+function matchCyrillicWord(content: string, phrase: string): number {
+  const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(`(?<![A-Za-zА-Яа-яЁё0-9])${escaped}(?![A-Za-zА-яЁё0-9])`, "giu");
+  return content.match(regex)?.length ?? 0;
+}
+
+function validatePostWriteRussian(
+  content: string,
+  genreProfile: GenreProfile,
+  bookRules: BookRules | null,
+): ReadonlyArray<PostWriteViolation> {
+  const violations: PostWriteViolation[] = [];
+
+  // 1. AI-tell phrase density (≤ 1 per 3000 chars)
+  for (const phrase of RU_AI_TELL_PHRASES) {
+    const count = matchCyrillicWord(content, phrase);
+    if (count > Math.ceil(content.length / 3000)) {
+      violations.push({
+        rule: "AI-tell phrase density",
+        severity: "warning",
+        description: `"${phrase}" встречается ${count} раз(а) (лимит: 1 на 3000 символов)`,
+        suggestion: "Замените на более конкретную, образную формулировку",
+      });
+    }
+  }
+
+  // 2. Chapter number references in prose (глава N / chapter N)
+  const chapterRefs = content.match(/(?:глава\s+\d+|[Cc]hapter\s+\d+)/g);
+  if (chapterRefs && chapterRefs.length > 0) {
+    const unique = [...new Set(chapterRefs)];
+    violations.push({
+      rule: "chapter-number-reference",
+      severity: "error",
+      description: `В тексте есть явные упоминания номеров глав: ${unique.map((r) => `"${r}"`).join(", ")}. Персонажи не знают, в какой они главе.`,
+      suggestion: "Замените на естественные отсылки: «в ту ночь», «когда сгорел склад», «после дела в порту»",
+    });
+  }
+
+  // 3. Collective shock clichés
+  for (const pattern of RU_COLLECTIVE_SHOCK_PATTERNS) {
+    const match = content.match(pattern);
+    if (match) {
+      violations.push({
+        rule: "collective-reaction",
+        severity: "warning",
+        description: `Шаблонная коллективная реакция: "${match[0]}"`,
+        suggestion: "Перепишите как физические реакции одного-двух конкретных персонажей",
+      });
+      break;
+    }
+  }
+
+  // 4. Paragraph overflow (500 chars, same as English)
+  const paragraphs = content.split(/\n\s*\n/).filter((p) => p.trim().length > 0);
+  const longParagraphs = paragraphs.filter((p) => p.length > 500);
+  if (longParagraphs.length >= 2) {
+    violations.push({
+      rule: "paragraph-length",
+      severity: "warning",
+      description: `${longParagraphs.length} абзацев длиннее 500 символов`,
+      suggestion: "Разбейте длинные абзацы на более короткие для читабельности",
+    });
+  }
+
+  violations.push(...detectParagraphShapeWarnings(content, "en"));
+
+  // 5. Book-specific prohibitions (case-insensitive substring)
+  if (bookRules?.prohibitions) {
+    for (const prohibition of bookRules.prohibitions) {
+      if (prohibition.length >= 2 && prohibition.length <= 50 && content.toLowerCase().includes(prohibition.toLowerCase())) {
+        violations.push({
+          rule: "book-prohibition",
+          severity: "error",
+          description: `Найдено запрещённое содержание: "${prohibition}"`,
+          suggestion: "Удалите или перепишите этот фрагмент",
+        });
+      }
+    }
+  }
+
+  // 6. Genre fatigue words (Cyrillic word-boundary aware)
+  const fatigueWords = bookRules?.fatigueWordsOverride && bookRules.fatigueWordsOverride.length > 0
+    ? bookRules.fatigueWordsOverride
+    : genreProfile.fatigueWords;
+  for (const word of fatigueWords) {
+    const count = matchCyrillicWord(content, word);
+    if (count > 1) {
+      violations.push({
+        rule: "fatigue-word",
+        severity: "warning",
+        description: `"${word}" встречается ${count} раз(а) (максимум 1 на главу)`,
+        suggestion: "Варируйте лексику",
+      });
+    }
+  }
+
+  return violations;
+}
+
 function appendParagraphShapeWarnings(
   violations: PostWriteViolation[],
   content: string,
-  language: "zh" | "en",
+  language: "zh" | "en" | "ru",
 ): void {
   const shape = analyzeParagraphShape(content, language);
   if (shape.paragraphs.length < 4) return;
@@ -557,12 +688,19 @@ function appendParagraphShapeWarnings(
             description: `${shape.shortParagraphs.length} of ${shape.paragraphs.length} paragraphs are shorter than ${shape.shortThreshold} characters.`,
             suggestion: "Merge adjacent action, observation, and reaction beats so the chapter does not collapse into one-line paragraphs.",
           }
-        : {
-            rule: "段落过碎",
-            severity: "warning",
-            description: `${shape.paragraphs.length}个段落里有${shape.shortParagraphs.length}个不足${shape.shortThreshold}字，段落被切得过碎。`,
-            suggestion: "把相邻的动作、观察、反应适当并段，不要每句话都单独起段。",
-          },
+        : language === "ru"
+          ? {
+              rule: "Paragraph fragmentation",
+              severity: "warning",
+              description: `${shape.shortParagraphs.length} из ${shape.paragraphs.length} абзацев короче ${shape.shortThreshold} символов.`,
+              suggestion: "Сливайте соседние эпизоды действий, наблюдений и реакций, чтобы глава не рассыпалась в однострочные абзацы.",
+            }
+          : {
+              rule: "段落过碎",
+              severity: "warning",
+              description: `${shape.paragraphs.length}个段落里有${shape.shortParagraphs.length}个不足${shape.shortThreshold}字，段落被切得过碎。`,
+              suggestion: "把相邻的动作、观察、反应适当并段，不要每句话都单独起段。",
+            },
     );
   }
 
@@ -575,19 +713,26 @@ function appendParagraphShapeWarnings(
             description: `${shape.maxConsecutiveShort} short paragraphs appear back to back.`,
             suggestion: "Break the one-beat-per-paragraph rhythm by folding connected beats into fuller paragraphs.",
           }
-        : {
-            rule: "连续短段",
-            severity: "warning",
-            description: `连续出现${shape.maxConsecutiveShort}个不足${shape.shortThreshold}字的短段，容易形成短句堆砌。`,
-            suggestion: "把连续的碎动作重新编组，至少让一个段落承载完整的动作链或情绪推进。",
-          },
+        : language === "ru"
+          ? {
+              rule: "Consecutive short paragraphs",
+              severity: "warning",
+              description: `Почерёдно идут ${shape.maxConsecutiveShort} коротких абзаца(ов) (короче ${shape.shortThreshold} символов).`,
+              suggestion: "Сгруппируйте цепочки коротких действий так, чтобы хотя бы один абзац несёт полный ход действия или эмоциональный сдвиг.",
+            }
+          : {
+              rule: "连续短段",
+              severity: "warning",
+              description: `连续出现${shape.maxConsecutiveShort}个不足${shape.shortThreshold}字的短段，容易形成短句堆砌。`,
+              suggestion: "把连续的碎动作重新编组，至少让一个段落承载完整的动作链或情绪推进。",
+            },
     );
   }
 }
 
 export function detectParagraphShapeWarnings(
   content: string,
-  language: "zh" | "en" = "zh",
+  language: "zh" | "en" | "ru" = "zh",
 ): ReadonlyArray<PostWriteViolation> {
   const violations: PostWriteViolation[] = [];
   appendParagraphShapeWarnings(violations, content, language);
@@ -599,11 +744,11 @@ function isDialogueParagraph(paragraph: string): boolean {
   return /^[""「『'《]/.test(trimmed) || /^[""]/.test(trimmed) || /^——/.test(trimmed);
 }
 
-function analyzeParagraphShape(content: string, language: "zh" | "en"): ParagraphShape {
+function analyzeParagraphShape(content: string, language: "zh" | "en" | "ru"): ParagraphShape {
   const paragraphs = extractParagraphs(content);
   // Exclude dialogue lines from short paragraph counting — dialogue is naturally short
   const narrativeParagraphs = paragraphs.filter((p) => !isDialogueParagraph(p));
-  const shortThreshold = language === "en" ? 120 : 35;
+  const shortThreshold = language === "zh" ? 35 : 120;
   const shortParagraphs = narrativeParagraphs.filter((paragraph) => paragraph.length < shortThreshold);
   const averageLength = paragraphs.length > 0
     ? paragraphs.reduce((sum, paragraph) => sum + paragraph.length, 0) / paragraphs.length
@@ -714,7 +859,7 @@ export function detectDuplicateTitle(
 export function resolveDuplicateTitle(
   newTitle: string,
   existingTitles: ReadonlyArray<string>,
-  language: "zh" | "en" = "zh",
+  language: "zh" | "en" | "ru" = "zh",
   options?: {
     readonly content?: string;
   },
@@ -736,9 +881,9 @@ export function resolveDuplicateTitle(
 
     let counter = 2;
     while (counter < 100) {
-      const candidate = language === "en"
-        ? `${trimmed} (${counter})`
-        : `${trimmed}（${counter}）`;
+      const candidate = language === "zh"
+        ? `${trimmed}（${counter}）`
+        : `${trimmed} (${counter})`;
       if (detectDuplicateTitle(candidate, existingTitles).length === 0) {
         return { title: candidate, issues: duplicateIssues };
       }
@@ -768,7 +913,7 @@ export function resolveDuplicateTitle(
 function detectTitleCollapse(
   newTitle: string,
   existingTitles: ReadonlyArray<string>,
-  language: "zh" | "en",
+  language: "zh" | "en" | "ru",
 ): ReadonlyArray<PostWriteViolation> {
   const recentTitles = existingTitles
     .map((title) => title.trim())
@@ -803,19 +948,26 @@ function detectTitleCollapse(
           description: `Chapter title "${newTitle}" keeps leaning on the recent "${titlePressure.repeatedToken}" title shell.`,
           suggestion: "Rename the chapter around a new image, action, consequence, or character focus.",
         }
-      : {
-          rule: "title-collapse",
-          severity: "warning",
-          description: `章节标题"${newTitle}"仍在沿用近期围绕“${titlePressure.repeatedToken}”的命名壳。`,
-          suggestion: "换一个新的意象、动作、后果或人物焦点来命名。",
-        },
+      : language === "ru"
+        ? {
+            rule: "title-collapse",
+            severity: "warning",
+            description: `Заголовок главы "${newTitle}" снова строится на недавнем шаблоне "${titlePressure.repeatedToken}".`,
+            suggestion: "Переименуйте главу вокруг нового образа, действия, последствия или персонального фокуса.",
+          }
+        : {
+            rule: "title-collapse",
+            severity: "warning",
+            description: `章节标题"${newTitle}"仍在沿用近期围绕“${titlePressure.repeatedToken}”的命名壳。`,
+            suggestion: "换一个新的意象、动作、后果或人物焦点来命名。",
+          },
   ];
 }
 
 function regenerateDuplicateTitle(
   baseTitle: string,
   existingTitles: ReadonlyArray<string>,
-  language: "zh" | "en",
+  language: "zh" | "en" | "ru",
   content?: string,
 ): string | undefined {
   if (!content || !content.trim()) {
@@ -824,20 +976,22 @@ function regenerateDuplicateTitle(
 
   const qualifier = language === "en"
     ? extractEnglishTitleQualifier(baseTitle, existingTitles, content)
-    : extractChineseTitleQualifier(baseTitle, existingTitles, content);
+    : language === "ru"
+      ? extractRussianTitleQualifier(baseTitle, existingTitles, content)
+      : extractChineseTitleQualifier(baseTitle, existingTitles, content);
   if (!qualifier) {
     return undefined;
   }
 
-  return language === "en"
-    ? `${baseTitle}: ${qualifier}`
-    : `${baseTitle}：${qualifier}`;
+  return language === "zh"
+    ? `${baseTitle}：${qualifier}`
+    : `${baseTitle}: ${qualifier}`;
 }
 
 function regenerateCollapsedTitle(
   baseTitle: string,
   existingTitles: ReadonlyArray<string>,
-  language: "zh" | "en",
+  language: "zh" | "en" | "ru",
   content?: string,
 ): string | undefined {
   if (!content || !content.trim()) {
@@ -846,7 +1000,9 @@ function regenerateCollapsedTitle(
 
   const fresh = language === "en"
     ? extractEnglishTitleQualifier(baseTitle, existingTitles, content)
-    : extractChineseTitleQualifier(baseTitle, existingTitles, content);
+    : language === "ru"
+      ? extractRussianTitleQualifier(baseTitle, existingTitles, content)
+      : extractChineseTitleQualifier(baseTitle, existingTitles, content);
   if (!fresh) {
     return undefined;
   }
@@ -901,6 +1057,36 @@ function extractChineseTitleQualifier(
 
 function extractEnglishTitleTerms(text: string): string[] {
   return [...new Set((text.match(/[A-Za-z]{4,}/g) ?? []).map((word) => word.toLowerCase()))];
+}
+
+const RUSSIAN_TITLE_STOP_WORDS = new Set([
+  "этот", "эта", "это", "глава", "раздел", "текст", "заголовок", "повтор",
+  "совсем", "просто", "случайно", "никак", "вновь", "снова", "ещё", "еще",
+]);
+
+function extractRussianTitleQualifier(
+  baseTitle: string,
+  existingTitles: ReadonlyArray<string>,
+  content: string,
+): string | undefined {
+  const blocked = new Set(extractRussianTitleTerms([baseTitle, ...existingTitles].join(" ")));
+  const words = (content.match(/[А-Яа-яЁё]{4,}/gu) ?? [])
+    .map((word) => word.toLowerCase())
+    .filter((word) => !RUSSIAN_TITLE_STOP_WORDS.has(word))
+    .filter((word) => !blocked.has(word));
+  const first = words[0];
+  if (!first) {
+    return undefined;
+  }
+
+  const second = words.find((word) => word !== first && !blocked.has(word));
+  return second
+    ? `${capitalize(first)} ${second}`
+    : capitalize(first);
+}
+
+function extractRussianTitleTerms(text: string): string[] {
+  return [...new Set((text.match(/[А-Яа-яЁё]{4,}/gu) ?? []).map((word) => word.toLowerCase()))];
 }
 
 function extractChineseTitleTerms(text: string): string[] {

@@ -23,6 +23,14 @@ const EN_RHETORICAL_PATTERNS: ReadonlyArray<{ readonly name: string; readonly re
   { name: "short punchy rhythm", regex: /[.!?]\s+[A-Z][^.!?]{1,24}[.!?]/g },
 ];
 
+// Common rhetorical patterns in Russian fiction
+const RU_RHETORICAL_PATTERNS: ReadonlyArray<{ readonly name: string; readonly regex: RegExp }> = [
+  { name: "simile (как/будто/словно)", regex: /\b(?:как\b|будто\b|словно\b)/gi },
+  { name: "rhetorical question", regex: /\b(?:разве|как же|почему бы)\b[^.!?]*\?/gi },
+  { name: "tricolon", regex: /\b\w+,\s+\w+,\s+и\s+\w+/gi },
+  { name: "short punchy rhythm", regex: /[.!?]\s+[А-ЯЁ][^.!?]{1,24}[.!?]/g },
+];
+
 /**
  * Analyze a reference text and extract its style profile.
  * The returned profile can be serialized to style_profile.json.
@@ -30,12 +38,17 @@ const EN_RHETORICAL_PATTERNS: ReadonlyArray<{ readonly name: string; readonly re
 export function analyzeStyle(
   text: string,
   sourceName?: string,
-  language: "zh" | "en" = "zh",
+  language: "zh" | "en" | "ru" = "zh",
 ): StyleProfile {
   const isEn = language === "en";
+  const isRu = language === "ru";
+  const isWordBased = isEn || isRu;
+  const wordRegex = isRu
+    ? /[\p{L}0-9]+(?:['\-][\p{L}0-9]+)*/gu
+    : /[A-Za-z0-9]+(?:'[A-Za-z0-9]+)?/g;
 
   const sentences = text
-    .split(isEn ? /[.!?\n]+/ : /[。！？\n]/)
+    .split(isEn ? /[.!?\n]+/ : isRu ? /[.!?…\n]+/ : /[。！？\n]/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 
@@ -44,9 +57,9 @@ export function analyzeStyle(
     .map((p) => p.trim())
     .filter((p) => p.length > 0);
 
-  // Measure length in the language's native unit: words for English, characters for Chinese.
+  // Measure length in the language's native unit: words for English/Russian, characters for Chinese.
   const measure = (s: string): number =>
-    isEn ? (s.match(/[A-Za-z0-9]+(?:'[A-Za-z0-9]+)?/g)?.length ?? 0) : s.replace(/\s+/g, "").length;
+    isWordBased ? (s.match(wordRegex)?.length ?? 0) : s.replace(/\s+/g, "").length;
 
   // Sentence length stats
   const sentenceLengths = sentences.map(measure);
@@ -68,21 +81,21 @@ export function analyzeStyle(
   const minParagraph = paragraphLengths.length > 0 ? Math.min(...paragraphLengths) : 0;
   const maxParagraph = paragraphLengths.length > 0 ? Math.max(...paragraphLengths) : 0;
 
-  // Vocabulary diversity (TTR — Type-Token Ratio): word-level for English, character-level for Chinese.
+  // Vocabulary diversity (TTR — Type-Token Ratio): word-level for English/Russian, character-level for Chinese.
   let vocabularyDiversity: number;
-  if (isEn) {
-    const words = text.toLowerCase().match(/[a-z0-9]+(?:'[a-z0-9]+)?/g) ?? [];
+  if (isWordBased) {
+    const words = text.toLowerCase().match(isRu ? /[\p{L}0-9]+/gu : /[a-z0-9]+(?:'[a-z0-9]+)?/g) ?? [];
     vocabularyDiversity = words.length > 0 ? new Set(words).size / words.length : 0;
   } else {
     const chars = text.replace(/[\s\n\r，。！？、：；""''（）【】《》\d]/g, "");
     vocabularyDiversity = chars.length > 0 ? new Set(chars).size / chars.length : 0;
   }
 
-  // Top sentence opening patterns: first word for English, first 2 chars for Chinese.
+  // Top sentence opening patterns: first word for English/Russian, first 2 chars for Chinese.
   const openingCounts: Record<string, number> = {};
   for (const s of sentences) {
-    const key = isEn
-      ? (s.match(/[A-Za-z']+/)?.[0]?.toLowerCase() ?? "")
+    const key = isWordBased
+      ? (s.match(isRu ? /[\p{L}']+/u : /[A-Za-z']+/)?.[0]?.toLowerCase() ?? "")
       : (s.length >= 2 ? s.slice(0, 2) : "");
     if (key) openingCounts[key] = (openingCounts[key] ?? 0) + 1;
   }
@@ -90,15 +103,15 @@ export function analyzeStyle(
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .filter(([, count]) => count >= 3)
-    .map(([pattern, count]) => (isEn ? `${pattern}… (${count})` : `${pattern}...(${count}次)`));
+    .map(([pattern, count]) => (isWordBased ? `${pattern}… (${count})` : `${pattern}...(${count}次)`));
 
   // Rhetorical features
-  const rhetoricalPatterns = isEn ? EN_RHETORICAL_PATTERNS : RHETORICAL_PATTERNS;
+  const rhetoricalPatterns = isEn ? EN_RHETORICAL_PATTERNS : isRu ? RU_RHETORICAL_PATTERNS : RHETORICAL_PATTERNS;
   const rhetoricalFeatures: string[] = [];
   for (const { name, regex } of rhetoricalPatterns) {
     const matches = text.match(regex);
     if (matches && matches.length >= 2) {
-      rhetoricalFeatures.push(isEn ? `${name} (${matches.length})` : `${name}(${matches.length}处)`);
+      rhetoricalFeatures.push(isWordBased ? `${name} (${matches.length})` : `${name}(${matches.length}处)`);
     }
   }
 

@@ -47,8 +47,26 @@ type AutoOutputMode = "patch-only" | "rewrite-only" | "allow-full";
 
 function buildTieredIssueList(
   issues: ReadonlyArray<AuditIssue>,
-  isEnglish: boolean,
+  language: "zh" | "en" | "ru",
 ): string {
+  const isEnglish = language === "en";
+  const isRussian = language === "ru";
+  const criticalLabel = isEnglish
+    ? "## Critical — Must Fix"
+    : isRussian
+      ? "## Critical — Обязательно исправить"
+      : "## Critical（必须解决）";
+  const highLabel = isEnglish
+    ? "## High — Should Improve"
+    : isRussian
+      ? "## High — Стоит улучшить"
+      : "## High（应当改善）";
+  const mediumLabel = isEnglish
+    ? "## Medium — Reference"
+    : isRussian
+      ? "## Medium — Для справки"
+      : "## Medium（参考建议）";
+
   const critical: string[] = [];
   const high: string[] = [];
   const medium: string[] = [];
@@ -66,19 +84,13 @@ function buildTieredIssueList(
 
   const parts: string[] = [];
   if (critical.length > 0) {
-    parts.push(isEnglish
-      ? `## Critical — Must Fix\n${critical.join("\n")}`
-      : `## Critical（必须解决）\n${critical.join("\n")}`);
+    parts.push(`${criticalLabel}\n${critical.join("\n")}`);
   }
   if (high.length > 0) {
-    parts.push(isEnglish
-      ? `## High — Should Improve\n${high.join("\n")}`
-      : `## High（应当改善）\n${high.join("\n")}`);
+    parts.push(`${highLabel}\n${high.join("\n")}`);
   }
   if (medium.length > 0) {
-    parts.push(isEnglish
-      ? `## Medium — Reference\n${medium.join("\n")}`
-      : `## Medium（参考建议）\n${medium.join("\n")}`);
+    parts.push(`${mediumLabel}\n${medium.join("\n")}`);
   }
 
   return parts.join("\n\n");
@@ -165,35 +177,44 @@ export class ReviserAgent extends BaseAgent {
       ? styleGuideRaw
       : (legacyRulesBody || "(无文风指南)");
 
-    const isEnglish = (bookLanguage ?? gp.language) === "en";
-    const resolvedLanguage = isEnglish ? "en" : "zh";
+    const resolvedLanguage = bookLanguage ?? gp.language;
+    const isEnglish = resolvedLanguage === "en";
+    const isRussian = resolvedLanguage === "ru";
 
     const issueList = mode === "auto"
-      ? buildTieredIssueList(issues, isEnglish)
+      ? buildTieredIssueList(issues, resolvedLanguage)
       : issues
-          .map((i) => `- [${i.severity}] ${i.category}: ${i.description}\n  ${isEnglish ? "Suggestion" : "建议"}: ${i.suggestion}`)
+          .map((i) => `- [${i.severity}] ${i.category}: ${i.description}\n  ${isEnglish ? "Suggestion" : isRussian ? "Предложение" : "建议"}: ${i.suggestion}`)
           .join("\n");
 
     const numericalRule = gp.numericalSystem
       ? (isEnglish
           ? "\n3. Numerical errors must be fixed precisely — cross-check before and after"
-          : "\n3. 数值错误必须精确修正，前后对账")
+          : isRussian
+            ? "\n3. Числовые ошибки обязаны исправляться точно — сверяй до и после"
+            : "\n3. 数值错误必须精确修正，前后对账")
       : "";
     const protagonistBlock = bookRules?.protagonist
       ? (isEnglish
           ? `\n\nProtagonist lock: ${bookRules.protagonist.name} — ${bookRules.protagonist.personalityLock.join(", ")}. Revisions must not violate the protagonist profile.`
-          : `\n\n主角人设锁定：${bookRules.protagonist.name}，${bookRules.protagonist.personalityLock.join("、")}。修改不得违反人设。`)
+          : isRussian
+            ? `\n\nЗаблокирован протагонист: ${bookRules.protagonist.name} — ${bookRules.protagonist.personalityLock.join(", ")}. Исправления не должны нарушать профиль протагониста.`
+            : `\n\n主角人设锁定：${bookRules.protagonist.name}，${bookRules.protagonist.personalityLock.join("、")}。修改不得违反人设。`)
       : "";
     // Length guardrail only used by legacy modes (manual CLI revise).
     // Auto mode delegates length to normalize, not reviser.
     const lengthGuardrail = mode !== "auto" && options?.lengthSpec
       ? (isEnglish
           ? "\n8. Keep the chapter word count within the target range; only allow minor deviation when fixing critical issues truly requires it"
-          : "\n8. 保持章节字数在目标区间内；只有在修复关键问题确实需要时才允许轻微偏离")
+          : isRussian
+            ? "\n8. Держи объём главы в целевом диапазоне; допускай незначительное отклонение только если исправление критичных проблем это действительно требует"
+            : "\n8. 保持章节字数在目标区间内；只有在修复关键问题确实需要时才允许轻微偏离")
       : "";
     const langPrefix = isEnglish
       ? `【LANGUAGE OVERRIDE】ALL output (FIXED_ISSUES, PATCHES, REVISED_CONTENT) MUST be in English.\n\n`
-      : "";
+      : isRussian
+        ? `【ПЕРЕОПРЕДЕЛЕНИЕ ЯЗЫКА】Весь вывод (FIXED_ISSUES, PATCHES, REVISED_CONTENT) ОБЯЗАН быть на русском языке.\n\n`
+        : "";
     const governedMode = Boolean(options?.chapterIntent && options?.contextPackage && options?.ruleStack);
     const hooksWorkingSet = governedMode && options?.contextPackage
       ? buildGovernedHookWorkingSet({
@@ -222,26 +243,50 @@ export class ReviserAgent extends BaseAgent {
     const systemPrompt = await this.withPromptPackGuidance(systemPromptBase, "longform.reviser");
 
     const ledgerBlock = gp.numericalSystem
-      ? `\n## 资源账本\n${ledger}`
+      ? isEnglish
+        ? `\n## Resource Ledger\n${ledger}`
+        : isRussian
+          ? `\n## Смета ресурсов\n${ledger}`
+          : `\n## 资源账本\n${ledger}`
       : "";
     const governedMemoryBlocks = options?.contextPackage
       ? buildGovernedMemoryEvidenceBlocks(options.contextPackage, resolvedLanguage)
       : undefined;
     const hookDebtBlock = governedMemoryBlocks?.hookDebtBlock ?? "";
     const hooksBlock = governedMemoryBlocks?.hooksBlock
-      ?? `\n## 伏笔池\n${hooksWorkingSet}\n`;
+      ?? (isEnglish
+        ? `\n## Pending Hooks\n${hooksWorkingSet}\n`
+        : isRussian
+          ? `\n## Ожидающие крючки\n${hooksWorkingSet}\n`
+          : `\n## 伏笔池\n${hooksWorkingSet}\n`);
     const outlineBlock = volumeOutline !== "(文件不存在)"
-      ? `\n## 卷纲\n${volumeOutline}\n`
+      ? (isEnglish
+        ? `\n## Volume Outline\n${volumeOutline}\n`
+        : isRussian
+          ? `\n## Карта тома\n${volumeOutline}\n`
+          : `\n## 卷纲\n${volumeOutline}\n`)
       : "";
     const bibleBlock = !governedMode && storyBible !== "(文件不存在)"
-      ? `\n## 世界观设定\n${storyBible}\n`
+      ? (isEnglish
+        ? `\n## Story Bible\n${storyBible}\n`
+        : isRussian
+          ? `\n## Библия мира\n${storyBible}\n`
+          : `\n## 世界观设定\n${storyBible}\n`)
       : "";
     const matrixBlock = characterMatrixWorkingSet !== "(文件不存在)"
-      ? `\n## 角色交互矩阵\n${characterMatrixWorkingSet}\n`
+      ? (isEnglish
+        ? `\n## Character Interaction Matrix\n${characterMatrixWorkingSet}\n`
+        : isRussian
+          ? `\n## Матрица взаимодействия персонажей\n${characterMatrixWorkingSet}\n`
+          : `\n## 角色交互矩阵\n${characterMatrixWorkingSet}\n`)
       : "";
     const summariesBlock = governedMemoryBlocks?.summariesBlock
       ?? (chapterSummariesWorkingSet !== "(文件不存在)"
-        ? `\n## 章节摘要\n${chapterSummariesWorkingSet}\n`
+        ? (isEnglish
+          ? `\n## Chapter Summaries\n${chapterSummariesWorkingSet}\n`
+          : isRussian
+            ? `\n## Сводки глав\n${chapterSummariesWorkingSet}\n`
+            : `\n## 章节摘要\n${chapterSummariesWorkingSet}\n`)
         : "");
     const volumeSummariesBlock = governedMemoryBlocks?.volumeSummariesBlock ?? "";
 
@@ -249,24 +294,66 @@ export class ReviserAgent extends BaseAgent {
     const hasFanficCanon = fanficCanon !== "(文件不存在)";
 
     const canonBlock = hasParentCanon
-      ? `\n## 正传正典参照（修稿专用）\n本书为番外作品。修改时参照正典约束，不可改变正典事实。\n${parentCanon}\n`
+      ? (isEnglish
+        ? `\n## Mainline Canon Reference (revision only)\nThis book is a spinoff. Revisions must respect the canon constraints; canon facts cannot be changed.\n${parentCanon}\n`
+        : isRussian
+          ? `\n## Канон основной линии (только для исправлений)\nЭта книга — спин-офф. При исправлениях соблюдай канонические ограничения; канонические факты менять нельзя.\n${parentCanon}\n`
+          : `\n## 正传正典参照（修稿专用）\n本书为番外作品。修改时参照正典约束，不可改变正典事实。\n${parentCanon}\n`)
       : "";
 
     const fanficCanonBlock = hasFanficCanon
-      ? `\n## 同人正典参照（修稿专用）\n本书为同人作品。修改时参照正典角色档案和世界规则，不可违反正典事实。角色对话必须保留原作语癖。\n${fanficCanon}\n`
+      ? (isEnglish
+        ? `\n## Fanfic Canon Reference (revision only)\nThis book is fan fiction. Revisions must respect the canon character sheets and world rules; canon facts cannot be violated. Character dialogue must keep the source work's speech tics.\n${fanficCanon}\n`
+        : isRussian
+          ? `\n## Канон фанфика (только для исправлений)\nЭта книга — фанфик. При исправлениях соблюдай канонические карточки персонажей и правила мира; канонические факты нарушать нельзя. Диалоги персонажей обязаны сохранять речевые особенности оригинала.\n${fanficCanon}\n`
+          : `\n## 同人正典参照（修稿专用）\n本书为同人作品。修改时参照正典角色档案和世界规则，不可违反正典事实。角色对话必须保留原作语癖。\n${fanficCanon}\n`)
       : "";
     const reducedControlBlock = options?.contextPackage && options.ruleStack
-      ? this.buildReducedControlBlock(options.chapterMemo, options.chapterIntentData, options.chapterIntent, options.contextPackage, options.ruleStack)
+      ? this.buildReducedControlBlock(options.chapterMemo, options.chapterIntentData, options.chapterIntent, options.contextPackage, options.ruleStack, resolvedLanguage)
       : "";
     // Length guardrail only in legacy modes — auto mode delegates length to normalize.
     const lengthGuidanceBlock = mode !== "auto" && options?.lengthSpec
-      ? `\n## 字数护栏\n目标字数：${options.lengthSpec.target}\n允许区间：${options.lengthSpec.softMin}-${options.lengthSpec.softMax}\n极限区间：${options.lengthSpec.hardMin}-${options.lengthSpec.hardMax}\n如果修正后超出允许区间，请优先压缩冗余解释、重复动作和弱信息句，不得新增支线或删掉核心事实。\n`
+      ? (isEnglish
+        ? `\n## Length Guardrail\nTarget word count: ${options.lengthSpec.target}\nAllowed range: ${options.lengthSpec.softMin}-${options.lengthSpec.softMax}\nExtreme range: ${options.lengthSpec.hardMin}-${options.lengthSpec.hardMax}\nIf the revision exceeds the allowed range, prioritize compressing redundant exposition, repeated actions and weak-information sentences; do not add subplots or remove core facts.\n`
+        : isRussian
+          ? `\n## Ограничение по объёму\nЦелевой объём: ${options.lengthSpec.target}\nДопустимый диапазон: ${options.lengthSpec.softMin}-${options.lengthSpec.softMax}\nПредельный диапазон: ${options.lengthSpec.hardMin}-${options.lengthSpec.hardMax}\nЕсли после исправления объём выходит за допустимый диапазон, сначала сжимай избыточные описания, повторяющиеся действия и слабоинформативные предложения; не добавляй подсюжеты и не удаляй ключевые факты.\n`
+          : `\n## 字数护栏\n目标字数：${options.lengthSpec.target}\n允许区间：${options.lengthSpec.softMin}-${options.lengthSpec.softMax}\n极限区间：${options.lengthSpec.hardMin}-${options.lengthSpec.hardMax}\n如果修正后超出允许区间，请优先压缩冗余解释、重复动作和弱信息句，不得新增支线或删掉核心事实。\n`)
       : "";
     const styleGuideBlock = reducedControlBlock.length === 0
-      ? `\n## 文风指南\n${styleGuide}`
+      ? (isEnglish
+        ? `\n## Style Guide\n${styleGuide}`
+        : isRussian
+          ? `\n## Стилевой гид\n${styleGuide}`
+          : `\n## 文风指南\n${styleGuide}`)
       : "";
 
-    const userPrompt = `请修正第${chapterNumber}章。
+    const userPrompt = isEnglish
+      ? `Revise chapter ${chapterNumber}.
+
+## Review Issues
+${issueList}
+
+## Current State Card
+${currentState}
+${ledgerBlock}
+${sanitizeNarrativeEvidenceBlock(hookDebtBlock, resolvedLanguage) ?? ""}${sanitizeNarrativeEvidenceBlock(hooksBlock, resolvedLanguage) ?? ""}${sanitizeNarrativeEvidenceBlock(volumeSummariesBlock, resolvedLanguage) ?? ""}${reducedControlBlock || outlineBlock}${bibleBlock}${matrixBlock}${sanitizeNarrativeEvidenceBlock(summariesBlock, resolvedLanguage) ?? ""}${canonBlock}${fanficCanonBlock}${styleGuideBlock}${lengthGuidanceBlock}
+
+## Chapter to Revise
+${chapterContent}`
+      : isRussian
+        ? `Исправь главу ${chapterNumber}.
+
+## Проблемы из рецензии
+${issueList}
+
+## Текущая карточка состояния
+${currentState}
+${ledgerBlock}
+${sanitizeNarrativeEvidenceBlock(hookDebtBlock, resolvedLanguage) ?? ""}${sanitizeNarrativeEvidenceBlock(hooksBlock, resolvedLanguage) ?? ""}${sanitizeNarrativeEvidenceBlock(volumeSummariesBlock, resolvedLanguage) ?? ""}${reducedControlBlock || outlineBlock}${bibleBlock}${matrixBlock}${sanitizeNarrativeEvidenceBlock(summariesBlock, resolvedLanguage) ?? ""}${canonBlock}${fanficCanonBlock}${styleGuideBlock}${lengthGuidanceBlock}
+
+## Глава на исправление
+${chapterContent}`
+        : `请修正第${chapterNumber}章。
 
 ## 审稿问题
 ${issueList}
@@ -388,17 +475,20 @@ ${chapterContent}`;
     protagonistBlock: string;
     numericalRule: string;
     lengthGuardrail: string;
-    resolvedLanguage: "zh" | "en";
+    resolvedLanguage: "zh" | "en" | "ru";
     lengthSpec?: LengthSpec;
     autoOutputMode: AutoOutputMode;
   }): string {
     const { langPrefix, gp, protagonistBlock, numericalRule, resolvedLanguage, lengthSpec, autoOutputMode } = params;
     // lengthGuardrail intentionally not used in auto mode — length constraint is embedded in REVISED_CONTENT description
     const en = resolvedLanguage === "en";
+    const ru = resolvedLanguage === "ru";
     const rewriteLengthConstraint = lengthSpec
       ? (en
           ? `\n  HARD CONSTRAINT: The revised chapter must stay within ${lengthSpec.softMin}-${lengthSpec.softMax} characters (target: ${lengthSpec.target}, ±25%). This is non-negotiable — do not exceed this range.`
-          : `\n  硬性约束：重写后的章节必须控制在 ${lengthSpec.softMin}-${lengthSpec.softMax} 字以内（目标 ${lengthSpec.target} 字，±25%）。这是不可突破的底线。`)
+          : ru
+            ? `\n  ЖЁСТКОЕ ОГРАНИЧЕНИЕ: исправленная глава обязана уместиться в ${lengthSpec.softMin}-${lengthSpec.softMax} (цель: ${lengthSpec.target}, ±25%). Это жёсткое ограничение — не выходи за этот диапазон.`
+            : `\n  硬性约束：重写后的章节必须控制在 ${lengthSpec.softMin}-${lengthSpec.softMax} 字以内（目标 ${lengthSpec.target} 字，±25%）。这是不可突破的底线。`)
       : "";
 
     const routingDirectiveEn = autoOutputMode === "rewrite-only"
@@ -411,6 +501,56 @@ ${chapterContent}`;
       : autoOutputMode === "patch-only"
         ? "\n\n分流指令：reviewer 报告的阻塞问题属于局部错（措辞、段落形状、疲劳词、信息越界、知识污染）。你必须只输出 PATCHES——不要整章改写。如果做不出补丁，留空 PATCHES。"
         : "";
+    const routingDirectiveRu = autoOutputMode === "rewrite-only"
+      ? "\n\nМАРШРУТИЗАЦИЯ: блокирующие проблемы рецензента — структурные/семантические (обрухновение персонажа, дрейф основной линии, отсутствие награды, разрыв таймлайна, нераскрытый крючок, дрейф мему и т.д.). Ты ОБЯЗАН вывести REVISED_CONTENT — не выдавай PATCHES, они не чинят этот класс проблем. Если не можешь безопасно переписать, об этом в FIXED_ISSUES, а REVISED_CONTENT оставь пустым."
+      : autoOutputMode === "patch-only"
+        ? "\n\nМАРШРУТИЗАЦИЯ: блокирующие проблемы рецензента — локальные (формулировки, форма абзацев, усталые слова, граница информации, загрязнение знаний). Ты ОБЯЗАН вывести ТОЛЬКО PATCHES — не переписывай целую главу. Если патчи невозможны, оставь PATCHES пустым."
+        : "";
+
+    if (ru) {
+      return `${langPrefix}Ты — профессиональный редактор веб-новелл в жанре ${gp.name}. Исправляй главу по замечаниям рецензии.${protagonistBlock}${routingDirectiveRu}
+
+PATCHES и REVISED_CONTENT решают разные типы проблем — выбирай по типу проблемы, а не по предпочтению:
+
+PATCHES — для локальных текстовых проблем (формулировки, диалоги, AI-следы, мелкие ошибки связности).
+  Каждый PATCH цитирует отрывок, который нужно изменить (предложение, абзац или несколько абзацев), и даёт замену. Непривлечённый текст остаётся ровно как есть.
+
+REVISED_CONTENT — для проблем целой главы (сжатие объёма, структурная переработка, перестройка ритма, серьёзное выравнивание сюжета).
+  Выводит полностью исправленную главу. Если в Critical есть проблемы объёма или структуры, ты ОБЯЗАН использовать REVISED_CONTENT — PATCHES не могут сжать или перестроить главу.${rewriteLengthConstraint}
+
+Если в Critical есть и локальные, и глобальные проблемы — используй REVISED_CONTENT (он решает всё за один проход).
+
+Принципы редактирования:
+1. Чини корневые причины — не делай поверхностную полировку${numericalRule}
+2. Статус крючков обязан оставаться синхронным с доской крючков. Если предоставлены брифы долга крючков, сохраняй сцены раскрытия
+3. Не меняй направление сюжета и ключевые конфликты
+4. Сохраняй оригинальный язык, стиль, ритм и дыхание — не сжимай переходные сцены и не убирай места для пауз
+5. Эмоции через действие (никогда не «он почувствовал гнев» — показывай). Ценности через поведение, а не лозунги
+6. Разные персонажи говорят по-разному. Запрещено «все ахнули хором»
+7. Эскалация: плохое складывается на плохое, каждое хуже предыдущего
+
+Редактор с учётом цикла:
+- Если эта глава должна быть «последствиями», но всё ещё наращивает напряжение — переписывай самый плотный конфликтный отрывок в отрывок, показывающий изменение: кто что потерял, чья позиция сдвинулась, что стало новой нормой
+- Если эта глава должна быть «кульминацией», но нет чёткой награды — найди ближайшую к награде сцену и усишь её — обещанное разрешение должно превзойти ожидания читателя
+- Повседневные отрывки, не служащие основной линии: переписывай как «наживку» — добавь деталь, указывающую в будущее, намёк, реакцию персонажа, сеющую любопытство
+
+Формат вывода:
+
+=== FIXED_ISSUES ===
+(Каждое исправление отдельной строкой; если безопасное локальное исправление невозможно — объясни здесь)
+
+=== PATCHES ===
+(Локальные патчи, если применимо. При использовании REVISED_CONTENT пропусти этот блок целиком)
+--- PATCH 1 ---
+TARGET_TEXT:
+(Точная цитата из оригинала, определяющая отрывок для изменения)
+REPLACEMENT_TEXT:
+(Заменяющий текст для этого отрывка)
+--- END PATCH ---
+
+=== REVISED_CONTENT ===
+(Полный исправленный текст главы — только когда PATCHES не решают проблему. При использовании PATCHES пропусти этот блок)`;
+    }
 
     return en
       ? `${langPrefix}You are a professional ${gp.name} web-fiction revision editor. Fix the chapter according to the review notes.${protagonistBlock}${routingDirectiveEn}
@@ -506,7 +646,7 @@ REPLACEMENT_TEXT:
     numericalRule: string;
     lengthGuardrail: string;
     mode: ReviseMode;
-    resolvedLanguage: "zh" | "en";
+    resolvedLanguage: "zh" | "en" | "ru";
   }): string {
     const { langPrefix, gp, protagonistBlock, numericalRule, lengthGuardrail, mode } = params;
     const modeDesc = MODE_DESCRIPTIONS[mode];
@@ -568,20 +708,37 @@ ${outputFormat}`;
     chapterIntent: string | undefined,
     contextPackage: ContextPackage,
     ruleStack: RuleStack,
+    language: "zh" | "en" | "ru" = "zh",
   ): string {
-    const selectedContext = renderNarrativeSelectedContext(contextPackage.selectedContext, "zh")
+    const selectedContext = renderNarrativeSelectedContext(contextPackage.selectedContext, language)
       .replace(/^### /gm, "- ");
     const overrides = ruleStack.activeOverrides.length > 0
       ? ruleStack.activeOverrides
         .map((override) => `- ${override.from} -> ${override.to}: ${override.reason} (${override.target})`)
         .join("\n")
-      : "- none";
+      : (language === "ru" ? "- нет" : "- none");
     // Prefer memo-based narrative block; fall back to legacy intent markdown
     const narrativeBlock = memo
-      ? renderMemoAsNarrativeBlock(memo, intent, "zh")
+      ? renderMemoAsNarrativeBlock(memo, intent, language)
       : chapterIntent
-        ? buildNarrativeIntentBrief(chapterIntent, "zh")
-        : "(无)";
+        ? buildNarrativeIntentBrief(chapterIntent, language)
+        : (language === "ru" ? "(нет)" : "(无)");
+
+    if (language === "ru") {
+      return `\n## Управляющие входы главы (составлено Planner/Composer)
+${narrativeBlock}
+
+### Выбранный контекст
+${selectedContext || "- нет"}
+
+### Стек правил
+- Жёсткие ограждения: ${ruleStack.sections.hard.join(", ") || "(нет)"}
+- Мягкие ограничения: ${ruleStack.sections.soft.join(", ") || "(нет)"}
+- Диагностические правила: ${ruleStack.sections.diagnostic.join(", ") || "(нет)"}
+
+### Активные переопределения
+${overrides}\n`;
+    }
 
     return `\n## 本章控制输入（由 Planner/Composer 编译）
 ${narrativeBlock}

@@ -1,6 +1,6 @@
 import type { LengthCountingMode, LengthSpec } from "../models/length-governance.js";
 
-export type LengthLanguage = "zh" | "en";
+export type LengthLanguage = "zh" | "en" | "ru";
 
 const REFERENCE_TARGET = 2200;
 const SOFT_RANGE_DELTA = 300;
@@ -9,11 +9,15 @@ const HARD_RANGE_DELTA = 600;
 // Per-chapter length default in the book's native unit: Chinese counts characters (3000字),
 // English counts words (~2000 ≈ a 3000-char chapter). One cross-language number would mis-scale —
 // 3000 read as English words runs ~50% long, and the hard-range guard then force-expands correct chapters.
+// Russian follows the English convention (word count, ~2000 words).
 export const DEFAULT_CHAPTER_LENGTH_ZH = 3000;
 export const DEFAULT_CHAPTER_LENGTH_EN = 2000;
+export const DEFAULT_CHAPTER_LENGTH_RU = 2000;
 
 export function defaultChapterLength(language: LengthLanguage = "zh"): number {
-  return language === "en" ? DEFAULT_CHAPTER_LENGTH_EN : DEFAULT_CHAPTER_LENGTH_ZH;
+  if (language === "en") return DEFAULT_CHAPTER_LENGTH_EN;
+  if (language === "ru") return DEFAULT_CHAPTER_LENGTH_RU;
+  return DEFAULT_CHAPTER_LENGTH_ZH;
 }
 
 export function countChapterLength(
@@ -23,7 +27,7 @@ export function countChapterLength(
   const normalized = stripMarkdownMetadata(content);
 
   if (countingMode === "en_words") {
-    const words = normalized.match(/[A-Za-z0-9]+(?:'[A-Za-z0-9]+)?/g);
+    const words = normalized.match(/[A-Za-z0-9\u0400-\u04FF\u0500-\u052F]+(?:['’][A-Za-z0-9\u0400-\u04FF\u0500-\u052F]+)?/g);
     return words?.length ?? 0;
   }
 
@@ -33,7 +37,7 @@ export function countChapterLength(
 export function resolveLengthCountingMode(
   language: LengthLanguage = "zh",
 ): LengthCountingMode {
-  return language === "en" ? "en_words" : "zh_chars";
+  return language === "zh" ? "zh_chars" : "en_words";
 }
 
 export function formatLengthCount(

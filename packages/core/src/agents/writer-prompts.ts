@@ -27,21 +27,27 @@ export function buildWriterSystemPrompt(
   chapterNumber?: number,
   mode: "full" | "creative" = "full",
   fanficContext?: FanficContext,
-  languageOverride?: "zh" | "en",
+  languageOverride?: "zh" | "en" | "ru",
   inputProfile: "legacy" | "governed" = "legacy",
   lengthSpec?: LengthSpec,
 ): string {
-  const isEnglish = (languageOverride ?? genreProfile.language) === "en";
+  const language = languageOverride ?? genreProfile.language;
+  const isEnglish = language === "en";
+  const isRussian = language === "ru";
   const governed = inputProfile === "governed";
-  const resolvedLengthSpec = lengthSpec ?? buildLengthSpec(book.chapterWordCount, isEnglish ? "en" : "zh");
+  const resolvedLengthSpec = lengthSpec ?? buildLengthSpec(book.chapterWordCount, language === "zh" ? "zh" : "en");
 
   const outputSection = isEnglish
     ? (mode === "creative"
         ? buildEnglishCreativeOutputFormat(book, genreProfile, resolvedLengthSpec)
         : buildEnglishOutputFormat(book, genreProfile, resolvedLengthSpec))
-    : (mode === "creative"
-        ? buildCreativeOutputFormat(book, genreProfile, resolvedLengthSpec)
-        : buildOutputFormat(book, genreProfile, resolvedLengthSpec));
+    : isRussian
+      ? (mode === "creative"
+          ? buildRussianCreativeOutputFormat(book, genreProfile, resolvedLengthSpec)
+          : buildRussianOutputFormat(book, genreProfile, resolvedLengthSpec))
+      : (mode === "creative"
+          ? buildCreativeOutputFormat(book, genreProfile, resolvedLengthSpec)
+          : buildOutputFormat(book, genreProfile, resolvedLengthSpec));
 
   const sections = isEnglish
     ? [
@@ -52,17 +58,36 @@ export function buildWriterSystemPrompt(
         buildGoldenOpeningDiscipline(chapterNumber, "en"),
         buildGenreRules(genreProfile, genreBody),
         buildProtagonistRules(bookRules),
-        buildNarrativePersonRule(bookRules, isEnglish ? "en" : "zh"),
+        buildNarrativePersonRule(bookRules, "en"),
         buildBookRulesBody(bookRulesBody),
         buildStyleGuide(styleGuide),
         buildStyleFingerprint(styleFingerprint),
-        fanficContext ? buildFanficCanonSection(fanficContext.fanficCanon, fanficContext.fanficMode) : "",
-        fanficContext ? buildCharacterVoiceProfiles(fanficContext.fanficCanon) : "",
-        fanficContext ? buildFanficModeInstructions(fanficContext.fanficMode, fanficContext.allowedDeviations) : "",
+        fanficContext ? buildFanficCanonSection(fanficContext.fanficCanon, fanficContext.fanficMode, language) : "",
+        fanficContext ? buildCharacterVoiceProfiles(fanficContext.fanficCanon, language) : "",
+        fanficContext ? buildFanficModeInstructions(fanficContext.fanficMode, fanficContext.allowedDeviations, language) : "",
         // Pre-write checklist moved to style_guide.md (v10)
         outputSection,
       ]
-    : [
+    : isRussian
+      ? [
+        buildRussianGenreIntro(book, genreProfile),
+        buildGovernedInputContract("ru", governed),
+        buildChapterMemoContract("ru", governed),
+        buildLengthGuidance(resolvedLengthSpec, "ru"),
+        buildGoldenOpeningDiscipline(chapterNumber, "ru"),
+        buildGenreRules(genreProfile, genreBody, "ru"),
+        buildProtagonistRules(bookRules),
+        buildNarrativePersonRule(bookRules, "ru"),
+        buildBookRulesBody(bookRulesBody),
+        buildStyleGuide(styleGuide),
+        buildStyleFingerprint(styleFingerprint),
+        fanficContext ? buildFanficCanonSection(fanficContext.fanficCanon, fanficContext.fanficMode, language) : "",
+        fanficContext ? buildCharacterVoiceProfiles(fanficContext.fanficCanon, language) : "",
+        fanficContext ? buildFanficModeInstructions(fanficContext.fanficMode, fanficContext.allowedDeviations, language) : "",
+        // Pre-write checklist moved to style_guide.md (v10)
+        outputSection,
+      ]
+      : [
         buildGenreIntro(book, genreProfile),
         buildGovernedInputContract("zh", governed),
         buildChapterMemoContract("zh", governed),
@@ -71,13 +96,13 @@ export function buildWriterSystemPrompt(
         bookRules?.enableFullCastTracking ? buildFullCastTracking() : "",
         buildGenreRules(genreProfile, genreBody),
         buildProtagonistRules(bookRules),
-        buildNarrativePersonRule(bookRules, isEnglish ? "en" : "zh"),
+        buildNarrativePersonRule(bookRules, "zh"),
         buildBookRulesBody(bookRulesBody),
         buildStyleGuide(styleGuide),
         buildStyleFingerprint(styleFingerprint),
-        fanficContext ? buildFanficCanonSection(fanficContext.fanficCanon, fanficContext.fanficMode) : "",
-        fanficContext ? buildCharacterVoiceProfiles(fanficContext.fanficCanon) : "",
-        fanficContext ? buildFanficModeInstructions(fanficContext.fanficMode, fanficContext.allowedDeviations) : "",
+        fanficContext ? buildFanficCanonSection(fanficContext.fanficCanon, fanficContext.fanficMode, language) : "",
+        fanficContext ? buildCharacterVoiceProfiles(fanficContext.fanficCanon, language) : "",
+        fanficContext ? buildFanficModeInstructions(fanficContext.fanficMode, fanficContext.allowedDeviations, language) : "",
         // Pre-write checklist moved to style_guide.md (v10)
         outputSection,
       ];
@@ -93,8 +118,30 @@ function buildGenreIntro(book: BookConfig, gp: GenreProfile): string {
   return `你是一位专业的${gp.name}网络小说作家。你为${book.platform}平台写作。`;
 }
 
-function buildGovernedInputContract(language: "zh" | "en", governed: boolean): string {
+function buildRussianGenreIntro(book: BookConfig, gp: GenreProfile): string {
+  return `Ты — профессиональный автор веб-романов жанра ${gp.name}, пишущий для русскоязычных платформ.
+
+Цель: ${book.chapterWordCount} слов на главу, всего ${book.targetChapters} глав.
+
+Пиши на русском языке. Варьируй длину предложений. Смешивай короткие рубленые предложения с длинными плавными. Сохраняй единый нарративный голос на протяжении всей книги.`;
+}
+
+function buildGovernedInputContract(language: "zh" | "en" | "ru", governed: boolean): string {
   if (!governed) return "";
+
+  if (language === "ru") {
+    return `## Контракт управления вводом
+
+- Конкретное управление главой идёт из предоставленного chapter intent и собранного пакета контекста.
+- Карта тома — план по умолчанию, а не безусловное глобальное превосходство.
+- Когда стоп правил рантайма фиксирует активный override L4 -> L3, следуй текущей задаче, а не локальному планированию.
+- Держи жёсткие перила компактно: канон, факты непрерывности и явные запреты всё равно побеждают.
+- Если предоставлен Variance Brief, подчинись ему: избегай перечисленных фраз/открытий/законцовок и удовлетвори scene obligation.
+- Если предоставлены Hook Debt Briefs, они содержат ИСХОДНЫЙ ТЕКСТ ЗАСЕВА из главы, где каждый крючок был заложен. Используй этот текст, чтобы написать продолжение или payoff, который ощущается связанным с тем, что читатель уже видел, — не размытое упоминание, а сцена, растущая из конкретного обещания.
+- Когда явная hook agenda называет допустимую цель resolve, приземли конкретный payoff-удар, отвечающий на исходный вопрос читателя из главы-засева.
+- Когда присутствует устаревший долг, не открывай соседние крючки налегке; сначала снимай давление со старых обещаний, прежде чем чеканить новый долг.
+- В сценах с несколькими персонажами включи хотя бы один обмен, несущий сопротивление, а не своди удар к резюме или объяснению.`;
+  }
 
   if (language === "en") {
     return `## Input Governance Contract
@@ -127,8 +174,25 @@ function buildGovernedInputContract(language: "zh" | "en", governed: boolean): s
 // Chapter memo alignment — 7 sections from mobile web-fiction craft methodology
 // ---------------------------------------------------------------------------
 
-function buildChapterMemoContract(language: "zh" | "en", governed: boolean): string {
+function buildChapterMemoContract(language: "zh" | "en" | "ru", governed: boolean): string {
   if (!governed) return "";
+
+  if (language === "ru") {
+    return `## Соотнесение с memo главы
+
+Тебе будет передан chapter_memo, состоящий из 7 markdown-блоков:
+
+- ## Текущая задача → конкретное действие, которое глава должна завершить; держись его на протяжении всей работы
+- ## Что сейчас ждёт читатель → управляет тем, как создаются / задерживаются / раскрываются эмоциональные разрывы
+- ## Что раскрыть / что пока утаить → payoff'ы, которые должны приземлиться в этой главе + карты, которые НЕЛЬЗЯ вскрывать
+- ## Какую задачу несут сцены быта и переходов → карта функций неконфликтных отрывков ([место отрывка] → [функция])
+- ## Три вопроса к главному выбору → трёхвопросная проверка, которую должен пройти каждый ключевой выбор персонажа
+- ## Обязательное изменение к концу главы → 1-3 конкретных изменения, которые обязан доставить финал (информация / отношения / физика / власть)
+- ## Журнал крючков главы → **правило жёсткого соответствия**: каждый hook_id, перечисленный в advance/resolve, ОБЯЗАН иметь **конкретно локализуемую payoff-сцену** в прозе — явные персонажи, действующие с конкретным объектом/событием/сведениями или говорящие о нём, с наблюдаемыми действиями. «Косвенные намёки» и «отложить на следующую главу» недопустимы. Пример: если memo говорит 'advance: H007 Расписка Ху Цзы → planted → pressured', в прозе должна быть сцена, где герой на самом деле трогает / видит / берёт эту расписку и что-то делает. Внутреннее упоминание вроде «он вспомнил, что расписка всё ещё в ящике» НЕ засчитывается. Каждая payoff-сцена advance/resolve должна быть не короче 60 слов. Пункты под defer не требуют прозы. Пункты под open требуют лишь естественного нового крючка-засева ближе к концу главы
+- ## Не делать → жёсткие запреты для этой главы
+
+Отражай каждый блок по порядку при черновике главы. Каждый блок должен оставить видимый след в прозе — если блок не отражён, глава не завершена. **После первого черновика проведи самопроверку журнала крючков**: выпиши каждый hook_id из advance/resolve и соотнеси каждый с конкретным отрезком прозы, содержащим действие / объект / диалог. Если не можешь соотнести — вернись и добавь; не сдавай черновик, где журнал живёт в memo, но нигде в прозе — рецензия пометит отсутствующий payoff и потребует конкретную сцену.`;
+  }
 
   if (language === "en") {
     return `## Chapter Memo Alignment
@@ -163,7 +227,14 @@ Address each section in order when drafting the chapter. Every section must leav
 写作时按段落顺序落实，每一段都要在正文里有对应的兑现痕迹。如果某一段没有体现到正文里，本章不算完成。**写完初稿后自检一遍 hook 账**：把 advance 和 resolve 的 hook_id 列下来，对照正文，确认每一个都能指到一段带具体动作/物件/对话的 prose。如果指不到，回去补写；不要提交"账本在 memo 里、正文里没落"的稿子——审稿会标记缺口并要求补出具体场景。`;
 }
 
-function buildLengthGuidance(lengthSpec: LengthSpec, language: "zh" | "en"): string {
+function buildLengthGuidance(lengthSpec: LengthSpec, language: "zh" | "en" | "ru"): string {
+  if (language === "ru") {
+    return `## Управление длиной
+
+- Целевая длина: ${lengthSpec.target} слов
+- Допустимый интервал: ${lengthSpec.softMin}-${lengthSpec.softMax} слов
+- Жёсткий интервал: ${lengthSpec.hardMin}-${lengthSpec.hardMax} слов`;
+  }
   if (language === "en") {
     return `## Length Guidance
 
@@ -187,9 +258,17 @@ function buildLengthGuidance(lengthSpec: LengthSpec, language: "zh" | "en"): str
 
 export function buildGoldenOpeningDiscipline(
   chapterNumber: number | undefined,
-  language: "zh" | "en",
+  language: "zh" | "en" | "ru",
 ): string {
   if (chapterNumber === undefined || chapterNumber > 3) return "";
+
+  if (language === "ru") {
+    return `## Дисциплина «золотого открытия» — глава ${chapterNumber}
+
+Это глава ${chapterNumber} из открывающей тройки — твоя проза напрямую решает, останется ли читатель. Правило «золотых трёх глав» — жёсткое ограничение на твои предложения, а не совет. Глава 1: в пределах первых 800 слов герой должен задеть главный конфликт (погоня, тупик, отстранение, перерождение как кризис); длинные абзацы фона запрещены, а миростроение едет на действиях героя, а не объясняется блоком. **Последнее предложение первых 300 слов (первый экран телефона читателя) должно приземлить драматичный / перевёртышный / бьющий удар — уровня «Полиция, я переродился», «Я, наверное, умру завтра», «Я присутствую на собственном похоронах» — а не фон или описание обстановки. Когда читатель доедет до низа первого экрана, он должен почувствовать тягу к следующей строке.** Глава 2: преимущество — сила, система, память перерождения, информационный перевес — должно быть **представлено** (одно конкретное событие использования с видимым следствием), а не **анонсировано** (абзац рассказчика о том, что оно существует). Глава 3: где-то в этой главе должно всплыть следующее измеримое краткосрочная цель героя, чтобы читатель, закрыв страницу, мог назвать, что будет дальше.
+
+Дисциплина, проходящая через все три открывающие главы: абзацы в три-пять строк (мобильное чтение), глаголы сильнее прилагательных, и каждая глава заканчивается маленьким крючком — обрывом, нераскрытым вопросом или эмоциональным разрывом. **Максимум две сцены и максимум два именованных персонажа, которые реально сталкиваются в главе (герой + один триггер/противник; эпизодические — только роль, без имени, без раскрытия). Правило редактора Цунь Юэ сжимает потолок с 3 до 2 — читатель уже путает 3.** Информация слоями внедряется в действие: базовые факты (внешность, статус, ситуация) выходят из того, что делает герой; ключевые мировые правила (механика системы, глубинная логика) крепятся к сюжетным триггерам; абзац чистой экспозиции запрещён.`;
+  }
 
   if (language === "en") {
     return `## Golden Opening Discipline — Chapter ${chapterNumber}
@@ -224,7 +303,29 @@ function buildFullCastTracking(): string {
 // Genre-specific rules
 // ---------------------------------------------------------------------------
 
-function buildGenreRules(gp: GenreProfile, genreBody: string): string {
+function buildGenreRules(gp: GenreProfile, genreBody: string, language: "zh" | "en" | "ru" = "zh"): string {
+  if (language === "ru") {
+    const fatigueLine = gp.fatigueWords.length > 0
+      ? `- Слова высокого утомления (${gp.fatigueWords.join(", ")}) — максимум 1 раз на главу`
+      : "";
+
+    const chapterTypesLine = gp.chapterTypes.length > 0
+      ? `Прежде чем писать, определи тип главы:\n${gp.chapterTypes.map(t => `- ${t}`).join("\n")}`
+      : "";
+
+    const pacingLine = gp.pacingRule
+      ? `- Правило ритма: ${gp.pacingRule}`
+      : "";
+
+    return [
+      `## Нормы жанра (${gp.name})`,
+      fatigueLine,
+      pacingLine,
+      chapterTypesLine,
+      genreBody,
+    ].filter(Boolean).join("\n\n");
+  }
+
   const fatigueLine = gp.fatigueWords.length > 0
     ? `- 高疲劳词（${gp.fatigueWords.join("、")}）单章最多出现1次`
     : "";
@@ -253,9 +354,14 @@ function buildGenreRules(gp: GenreProfile, genreBody: string): string {
 // Narrative person is a durable user constraint: enforce it only when the user
 // explicitly set one (book_rules.narrativePerson). When unset, stay silent so the
 // genre default applies — we never impose a person the user didn't ask for.
-function buildNarrativePersonRule(bookRules: BookRules | null, language: "zh" | "en"): string {
+function buildNarrativePersonRule(bookRules: BookRules | null, language: "zh" | "en" | "ru"): string {
   const person = bookRules?.narrativePerson;
   if (!person) return "";
+  if (language === "ru") {
+    return person === "first"
+      ? "## Лицо повествования (жёсткое ограничение)\nПиши эту книгу ВСЮ на ПЕРВОМ лице (внутренняя точка зрения героя). НЕ переходи на третье лицо или всеведущего рассказчика — это ограничение перекрывает жанровый обычай и твою настройку по умолчанию."
+      : "## Лицо повествования (жёсткое ограничение)\nПиши эту книгу на ТРЕТЬЕМ лице.";
+  }
   if (language === "en") {
     return person === "first"
       ? "## Narrative person (hard constraint)\nWrite this book entirely in FIRST person (the protagonist's inner viewpoint). Do NOT slip into third person or an omniscient narrator — this overrides genre convention and your default."
@@ -559,7 +665,7 @@ ${updatedLedger}
 |-----------|---------|-----------------|---------|------------------|---------------|
 
 === UPDATED_CHARACTER_MATRIX ===
-(The updated character matrix, one ## block per character.)
+(Updated character matrix, one ## block per character.)
 
 ## Character Name
 - **Role**: protagonist / antagonist / ally / supporting / mentioned
@@ -572,4 +678,115 @@ ${updatedLedger}
 - **Relations**: Character (relationship / Ch#) | ...
 - **Knows**: what this character knows (only what they witnessed or were told)
 - **Unknown**: what this character does not know`;
+}
+
+// ---------------------------------------------------------------------------
+// Russian output formats (parser keys off the === MARKER === anchors, so the
+// table labels below are safely localized to Russian).
+// ---------------------------------------------------------------------------
+
+function buildRussianPreWriteTable(gp: GenreProfile): string {
+  const resourceRow = gp.numericalSystem
+    ? "| Итого ресурсов сейчас | X | в соответствии со сметой |\n| Ожидаемый прирост в этой главе | +X (источник) | без прироста писать +0 |\n"
+    : "";
+
+  return `=== PRE_WRITE_CHECK ===
+(Вывести Markdown-таблицу. Каждая строка соотнесена с семью блоками chapter_memo, а не с картой тома.)
+| Проверка | Эта глава | Примечание |
+|----------|-----------|------------|
+| Текущая задача | Пересказать «Текущую задачу» chapter_memo и конкретное действие этой главы | Конкретно, без абстракций |
+| Что ждёт читатель | Как эта глава с этим работает: создать / задержать / раскрыть | По memo |
+| Раскрыть / утаить | Намёки к раскрытию + карты, которые надо держать | Цитировать memo |
+| Функция бытовых / переходных сцен | Если есть бытовые или переходные отрывки — указать функцию каждого | По карте memo |
+| Обязательное изменение к концу главы | 1-3 конкретных изменения из блока конца главы memo | Должно приземлиться на страницу |
+| Не делать | Пересказать список «Не делать» memo | Проза не должна задевать их |
+| Диапазон контекста | Главы X–Y / карточка состояния / файлы сеттинга | |
+| Текущий якорь | Место / противник / цель payoff | Якорь должен быть конкретным |
+${resourceRow}| Крючки к раскрытию | Настоящий hook_id (если нет — none) | По пулу крючков |
+| Конфликт этой главы | Одной строкой | |
+| Тип главы | ${gp.chapterTypes.join(" / ")} | |
+| Сканирование рисков | OOC / утечка информации / конфликт сеттинга${gp.powerScaling ? " / поломка балансa силы" : ""} / ритм / утомление словаря | |`;
+}
+
+function buildRussianContentBlocks(lengthSpec: LengthSpec): string {
+  return `=== CHAPTER_TITLE ===
+(Заголовок главы, без «Глава X». Он должен отличаться от существующих заголовков; не переиспользовать одинаковые или похожие заголовки. Если предоставлена история недавних заголовков или частотные заголовочные слова — избегать повторяющихся корней и выеденной символики.)
+
+=== CHAPTER_CONTENT ===
+(Проза главы. Цель — ${lengthSpec.target} слов, допустимый интервал ${lengthSpec.softMin}-${lengthSpec.softMax} слов.)`;
+}
+
+function buildRussianCreativeOutputFormat(_book: BookConfig, gp: GenreProfile, lengthSpec: LengthSpec): string {
+  return `## Формат вывода (соблюдать строго)
+
+${buildRussianPreWriteTable(gp)}
+
+${buildRussianContentBlocks(lengthSpec)}
+
+[Важно] Выводить только три блока выше (PRE_WRITE_CHECK, CHAPTER_TITLE, CHAPTER_CONTENT). Карточки состояния, пул крючков и сводки обрабатываются на последующем этапе расчёта; не выводить их.`;
+}
+
+function buildRussianOutputFormat(_book: BookConfig, gp: GenreProfile, lengthSpec: LengthSpec): string {
+  const postSettlement = gp.numericalSystem
+    ? `=== POST_SETTLEMENT ===
+(Если произошли числовые изменения, вывести Markdown-таблицу.)
+| Пункт расчёта | Эта глава | Примечание |
+|---------------|-----------|------------|
+| Смета ресурсов | начальные X / прирост +Y / конечные Z | без прироста писать +0 |
+| Ключевые ресурсы | название -> вклад +Y (основание) | если нет — «нет» |
+| Изменения крючков | новый / раскрыт / отложен крючок | синхронизировать пул крючков |`
+    : `=== POST_SETTLEMENT ===
+(Если изменился хотя бы один крючок, вывести.)
+| Пункт расчёта | Эта глава | Примечание |
+|---------------|-----------|------------|
+| Изменения крючков | новый / раскрыт / отложен крючок | синхронизировать пул крючков |`;
+
+  const updatedLedger = gp.numericalSystem
+    ? `\n=== UPDATED_LEDGER ===\n(Полная обновлённая смета ресурсов, Markdown-таблица.)`
+    : "";
+
+  return `## Формат вывода (соблюдать строго)
+
+${buildRussianPreWriteTable(gp)}
+
+${buildRussianContentBlocks(lengthSpec)}
+
+${postSettlement}
+
+=== UPDATED_STATE ===
+(Полная обновлённая карточка состояния, Markdown-таблица.)
+${updatedLedger}
+=== UPDATED_HOOKS ===
+(Полный обновлённый пул крючков, Markdown-таблица.)
+
+=== CHAPTER_SUMMARY ===
+(Сводка главы в виде Markdown-таблицы со следующими столбцами.)
+| Глава | Название | Персонажи | Ключевые события | Изменение состояния | Динамика крючков | Эмоциональный тон | Тип главы |
+|-------|----------|-----------|------------------|---------------------|------------------|-------------------|-----------|
+| N | заголовок этой главы | Перс1, Перс2 | однострочное резюме | ключевое изменение | H01 заложен / H02 продвинут | эмоциональная дуга | ${gp.chapterTypes.length > 0 ? gp.chapterTypes.join(" / ") : "переход / конфликт / кульминация / развязка"} |
+
+=== UPDATED_SUBPLOTS ===
+(Полная обновлённая доска подсюжетов, Markdown-таблица.)
+| ID подсюжета | Название | Персонажи | Глава старта | Глава последней активности | Глав с того | Статус | Прогресс | ETA раскрытия |
+|--------------|----------|-----------|--------------|----------------------------|------------|--------|----------|---------------|
+
+=== UPDATED_EMOTIONAL_ARCS ===
+(Полные обновлённые эмоциональные дуги, Markdown-таблица.)
+| Персонаж | Глава | Эмоциональное состояние | Триггер | Интенсивность (1-10) | Направление дуги |
+|----------|-------|-------------------------|---------|----------------------|------------------|
+
+=== UPDATED_CHARACTER_MATRIX ===
+(Обновлённая матрица персонажей, по одному ## блоку на персонажа.)
+
+## Имя персонажа
+- **Роль**: герой / антагонист / союзник / второстепенный / упомянут
+- **Ярлыки**: ключевые ярлыки идентичности
+- **Контраст**: характерная деталь, ломающая стереотип
+- **Голос**: как говорит
+- **Характер**: фоновый темперамент
+- **Мотивация**: ключевая движущая сила
+- **Сейчас**: непосредственная цель этой главы
+- **Отношения**: Персонаж (связь / Гл#) | ...
+- **Знает**: что этот персонаж знает (только увиденное им самим или сообщённое)
+- **Не знает**: чего этот персонаж не знает`;
 }

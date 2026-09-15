@@ -1,6 +1,6 @@
 ---
 name: inkos
-description: Story Creation and Translation AI Agent with Studio Chat, CLI, and TUI - use for long-form novels, short fiction, scripts, storyboards, interactive-film projects, open-world / branching play, fan fiction, spinoffs, style imitation, continuations, covers, and multilingual EPUB/PDF/TXT/Markdown translation. Includes Agent Skills, traceable research, governed context, persistent story state, multi-model routing, image services, and InkOS Studio.
+description: Story Creation and Translation AI Agent with Studio Chat, CLI, and TUI - use for long-form novels, short fiction, scripts, storyboards, interactive-film projects, open-world / branching play, fan fiction, Russian novel writing (4 built-in Russian genres), spinoffs, style imitation, continuations, covers, and multilingual EPUB/PDF/TXT/Markdown translation. Includes Agent Skills, traceable research, governed context, persistent story state, multi-model routing, image services, and InkOS Studio.
 version: 2.9.0
 metadata: { "openclaw": { "emoji": "📖", "requires": { "bins": ["inkos", "node"], "env": ["OPENAI_API_KEY"] }, "primaryEnv": "OPENAI_API_KEY", "homepage": "https://github.com/Narcooo/inkos", "install": [{ "id": "npm", "kind": "node", "package": "@actalk/inkos", "label": "Install InkOS (npm)" }] } }
 ---
@@ -49,6 +49,7 @@ v1.7 added multilingual translation/localization, narrative forecasting, backgro
 ## When to Use InkOS
 
 - **English novel writing**: Native English support with 10 genre profiles (LitRPG, Progression Fantasy, Isekai, etc.). Set `--lang en`
+- **Russian novel writing**: Native Russian support with 4 genre profiles (ru-fantasy, ru-detective, ru-urban, ru-romance). Set `--lang ru`
 - **Chinese web novel writing**: 5 built-in Chinese genres (xuanhuan, xianxia, urban, horror, other)
 - **Fan fiction**: Create fanfic from source material with 4 modes (canon, au, ooc, cp)
 - **Batch chapter generation**: Generate multiple chapters with consistent quality
@@ -361,6 +362,22 @@ inkos config set-global --lang en
 - 10 English genres: litrpg, progression, isekai, cultivation, system-apocalypse, dungeon-core, romantasy, sci-fi, tower-climber, cozy
 - Each genre has dedicated pacing rules, fatigue word lists (e.g., "delve", "tapestry", "testament"), and audit dimensions
 - Use `inkos genre list` to see all available genres
+
+### Workflow 10.5: Write a Russian Novel
+
+```bash
+# Create a Russian fantasy novel (language auto-detected from ru-* genre)
+inkos book create --title "Меч Тьмы" --genre ru-fantasy --chapter-words 1200
+
+# Or set language explicitly
+inkos book create --title "Мой роман" --genre other --lang ru
+
+# Set Russian as default for all projects
+inkos config set-global --lang ru
+```
+- 4 Russian genres: ru-fantasy, ru-detective, ru-urban, ru-romance
+- Russian chapters are counted by words (like English), while Chinese is counted by characters
+- All story artifacts (outline, roles, runtime state, chapters) are generated in Russian
 
 ### Workflow 11: Fan Fiction
 
@@ -690,7 +707,7 @@ The `--context` parameter provides directional hints to the Writer and Architect
 inkos write next book-id --count 2 --context "protagonist discovers betrayal, must decide whether to trust mentor"
 ```
 - Context is optional but highly recommended for narrative coherence
-- Supports both English and Chinese
+- Supports English, Chinese, and Russian
 
 ## Genre Management
 
@@ -698,7 +715,9 @@ inkos write next book-id --count 2 --context "protagonist discovers betrayal, mu
 ```bash
 inkos genre list
 inkos genre show xuanhuan
+inkos genre show ru-fantasy
 ```
+Built-in genres span 3 languages: 5 Chinese (xuanhuan, xianxia, urban, horror, other), 10 English (litrpg, progression, ...), and 4 Russian (ru-fantasy, ru-detective, ru-urban, ru-romance).
 
 ### Create Custom Genre
 ```bash
@@ -718,7 +737,7 @@ inkos genre copy xuanhuan
 | Command | Purpose | Notes |
 |---------|---------|-------|
 | `inkos init [name]` | Initialize project | One-time setup |
-| `inkos book create` | Create new book | Returns book-id. `--brief <file>`, `--lang en/zh`, `--genre litrpg/progression/...` |
+| `inkos book create` | Create new book | Returns book-id. `--brief <file>`, `--lang en/zh/ru`, `--genre litrpg/ru-fantasy/...` |
 | `inkos book list` | List all books | Shows IDs, statuses |
 | `inkos write next` | Full pipeline (draft→audit→revise) | Primary workflow command |
 | `inkos draft` | Generate draft only | No auditing/revision |
@@ -772,7 +791,7 @@ inkos genre copy xuanhuan
 
 **"Context invalid"**
 - Ensure `--context` is a string (wrap in quotes if multi-word)
-- Context can be in English or Chinese
+- Context can be in English, Chinese, or Russian
 
 **"Audit failed"**
 - Check chapter for encoding issues

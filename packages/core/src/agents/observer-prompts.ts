@@ -9,13 +9,74 @@ import type { GenreProfile } from "../models/genre-profile.js";
 export function buildObserverSystemPrompt(
   book: BookConfig,
   genreProfile: GenreProfile,
-  language?: "zh" | "en",
+  language?: "zh" | "en" | "ru",
 ): string {
-  const isEnglish = (language ?? genreProfile.language) === "en";
+  const resolvedLang = language ?? genreProfile.language;
+  const isEnglish = resolvedLang === "en";
 
   const langPrefix = isEnglish
     ? "【LANGUAGE OVERRIDE】ALL output MUST be in English.\n\n"
-    : "";
+    : resolvedLang === "ru"
+      ? "【ПЕРЕОПРЕДЕЛЕНИЕ ЯЗЫКА】Весь вывод ОБЯЗАН быть на русском языке.\n\n"
+      : "";
+
+  if (resolvedLang === "ru") {
+    return `${langPrefix}Ты — специалист по извлечению фактов. Прочитай текст главы и извлеки КАЖДОЕ наблюдаемое фактическое изменение.
+
+## Категории извлечения
+
+1. **Действия персонажей**: кто что сделал, кому, почему
+2. **Изменение местоположения**: кто куда переместился, откуда
+3. **Изменение ресурсов**: что получено, потеряно, потрачено, в каком количестве
+4. **Изменение отношений**: новые встречи, сдвиги доверия/недоверия, союзы, предательства
+5. **Эмоциональные сдвиги**: настроение персонажа до → после, событие-триггер
+6. **Поток информации**: кто что узнал, кто по-прежнему не знает
+7. **Сюжетные линии**: новые заложенные тайны, продвинутые линии, раскрытые линии
+8. **Движение времени**: сколько времени прошло, упомянутые временные маркеры
+9. **Физическое состояние**: раны, выздоровление, усталость, изменения силы
+
+## Правила
+
+- Извлекать ТОЛЬКО из текста — не додумывать, что могло произойти
+- Недоизвлечение недопустимо: если сомневаешься, значимо ли что-то — включи
+- Конкретизируй: «у Линь Чэня переломана левая рука», а не «Линь Чэнь пострадал»
+- Включай внутриглавные временные маркеры
+- Отмечай, какие персонажи присутствуют в каждой сцене
+
+## Формат вывода
+
+=== OBSERVATIONS ===
+
+[CHARACTERS]
+- <имя>: <действие/изменение состояния> (сцена: <место>)
+
+[LOCATIONS]
+- <персонаж> переместился с <A> на <B>
+
+[RESOURCES]
+- <персонаж> получил/потерял <предмет> (количество: <n>)
+
+[RELATIONSHIPS]
+- <персA> → <персB>: <описание изменения>
+
+[EMOTIONS]
+- <персонаж>: <до> → <после> (триггер: <событие>)
+
+[INFORMATION]
+- <персонаж> узнал: <факт> (источник: <как>)
+- <персонаж> по-прежнему не знает: <факт>
+
+[PLOT_THREADS]
+- NEW: <описание>
+- ADVANCED: <существующая линия> — <прогресс>
+- RESOLVED: <линия> — <разрешение>
+
+[TIME]
+- <временные маркеры, длительность>
+
+[PHYSICAL_STATE]
+- <персонаж>: <рана/выздоровление/усталость/изменение силы>`;
+  }
 
   return `${langPrefix}${isEnglish ? "You are" : "你是"}${isEnglish ? " a fact extraction specialist" : "一个事实提取专家"}。${isEnglish ? "Read the chapter text and extract EVERY observable fact change." : "阅读章节正文，提取每一个可观察到的事实变化。"}
 
@@ -118,9 +179,13 @@ export function buildObserverUserPrompt(
   chapterNumber: number,
   title: string,
   content: string,
-  language?: "zh" | "en",
+  language?: "zh" | "en" | "ru",
 ): string {
   const isEnglish = language === "en";
+  const isRussian = language === "ru";
+  if (isRussian) {
+    return `Извлеки все факты из главы ${chapterNumber} «${title}»:\n\n${content}`;
+  }
   return isEnglish
     ? `Extract all facts from Chapter ${chapterNumber} "${title}":\n\n${content}`
     : `请提取第${chapterNumber}章「${title}」中的所有事实：\n\n${content}`;

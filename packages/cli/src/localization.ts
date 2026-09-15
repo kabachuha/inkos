@@ -1,6 +1,6 @@
 import { formatLengthCount, resolveLengthCountingMode } from "@actalk/inkos-core";
 
-export type CliLanguage = "zh" | "en";
+export type CliLanguage = "zh" | "en" | "ru";
 
 type WriteIssue = {
   readonly severity: string;
@@ -27,7 +27,7 @@ type ImportResultShape = {
 };
 
 function localize(language: CliLanguage, messages: { zh: string; en: string }): string {
-  return language === "en" ? messages.en : messages.zh;
+  return language === "zh" ? messages.zh : messages.en;
 }
 
 function normalizeCliLanguageTag(value: string | undefined): CliLanguage | undefined {
@@ -41,6 +41,9 @@ function normalizeCliLanguageTag(value: string | undefined): CliLanguage | undef
   }
   if (normalized.startsWith("zh")) {
     return "zh";
+  }
+  if (normalized.startsWith("ru")) {
+    return "ru";
   }
   return undefined;
 }

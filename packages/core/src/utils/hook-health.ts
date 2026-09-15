@@ -5,7 +5,7 @@ import { describeHookLifecycle, localizeHookPayoffTiming, normalizeStoredHookSta
 import { HOOK_HEALTH_DEFAULTS } from "./hook-policy.js";
 
 export function analyzeHookHealth(params: {
-  readonly language: "zh" | "en";
+  readonly language: "zh" | "en" | "ru";
   readonly chapterNumber: number;
   readonly targetChapters?: number;
   readonly hooks: ReadonlyArray<HookRecord>;
@@ -45,10 +45,14 @@ export function analyzeHookHealth(params: {
       params.language,
       params.language === "en"
         ? `There are ${activeHooks.length} active hooks, above the recommended cap of ${maxActiveHooks}.`
-        : `当前有 ${activeHooks.length} 个活跃伏笔，已经高于建议上限 ${maxActiveHooks} 个。`,
+        : params.language === "ru"
+          ? `Сейчас ${activeHooks.length} активных хуков, это выше рекомендуемого лимита в ${maxActiveHooks}.`
+          : `当前有 ${activeHooks.length} 个活跃伏笔，已经高于建议上限 ${maxActiveHooks} 个。`,
       params.language === "en"
         ? "Prefer advancing, resolving, or deferring existing debt before opening more hooks."
-        : "优先推进、回收或延后已有伏笔，再继续开新伏笔。",
+        : params.language === "ru"
+          ? "Сначала продвигай, закрывай или откладывай существующие хуки, прежде чем открывать новые."
+          : "优先推进、回收或延后已有伏笔，再继续开新伏笔。",
     ));
   }
 
@@ -84,7 +88,9 @@ export function analyzeHookHealth(params: {
       }),
       params.language === "en"
         ? "Move one pressured hook with a real payoff, escalation, or explicit defer before opening adjacent debt."
-        : "先让一个已进入压力区的伏笔发生真实推进、回收或明确延后，再继续扩展同类债务。",
+        : params.language === "ru"
+          ? "Сначала дай одному давящему хуку реальную выплату, эскалацию или явное откладывание, прежде чем раскрывать соседние долги."
+          : "先让一个已进入压力区的伏笔发生真实推进、回收或明确延后，再继续扩展同类债务。",
     ));
   } else {
     const latestRealAdvance = activeHooks.reduce(
@@ -100,10 +106,14 @@ export function analyzeHookHealth(params: {
         params.language,
         params.language === "en"
           ? `No real hook advancement has landed for ${params.chapterNumber - latestRealAdvance} chapters.`
-          : `已经连续 ${params.chapterNumber - latestRealAdvance} 章没有真实伏笔推进。`,
+          : params.language === "ru"
+            ? `Уже ${params.chapterNumber - latestRealAdvance} глав без реального продвижения хуков.`
+            : `已经连续 ${params.chapterNumber - latestRealAdvance} 章没有真实伏笔推进。`,
         params.language === "en"
           ? "Schedule one old hook for real movement instead of opening parallel restatements."
-          : "下一章优先让一个旧伏笔发生真实推进，而不是继续平行重述。",
+          : params.language === "ru"
+            ? "Планово продвинь один старый хук по-настоящему, вместо параллельных пересказов."
+            : "下一章优先让一个旧伏笔发生真实推进，而不是继续平行重述。",
       ));
     }
   }
@@ -120,10 +130,14 @@ export function analyzeHookHealth(params: {
         params.language,
         params.language === "en"
           ? `Opened ${newHookIds.length} new hooks without resolving any older debt.`
-          : `本章新开了 ${newHookIds.length} 个伏笔，但没有回收任何旧债。`,
+          : params.language === "ru"
+            ? `В главе открыто ${newHookIds.length} новых хуков, при этом ни один старый долг не закрыт.`
+            : `本章新开了 ${newHookIds.length} 个伏笔，但没有回收任何旧债。`,
         params.language === "en"
           ? "Keep the hook table from ballooning by pairing new openings with old payoffs."
-          : "控制伏笔膨胀，新开伏笔时尽量配套回收旧伏笔。",
+          : params.language === "ru"
+            ? "Не позволяй таблице хуков раздуваться: каждое новое открытие сочетай с закрытием старого."
+            : "控制伏笔膨胀，新开伏笔时尽量配套回收旧伏笔。",
       ));
     }
   }
@@ -132,7 +146,7 @@ export function analyzeHookHealth(params: {
 }
 
 function buildPressureDescription(params: {
-  readonly language: "zh" | "en";
+  readonly language: "zh" | "en" | "ru";
   readonly entries: ReadonlyArray<{
     readonly hook: HookRecord;
     readonly lifecycle: ReturnType<typeof describeHookLifecycle>;
@@ -146,18 +160,28 @@ function buildPressureDescription(params: {
       const pressure = localizePressureLabel(lifecycle, params.language);
       return params.language === "en"
         ? `${hook.hookId} (${timing}, ${pressure})`
-        : `${hook.hookId}（${timing}，${pressure}）`;
+        : params.language === "ru"
+          ? `${hook.hookId} (${timing}, ${pressure})`
+          : `${hook.hookId}（${timing}，${pressure}）`;
     });
   const suffix = params.entries.length > summarized.length
     ? params.language === "en"
       ? `, +${params.entries.length - summarized.length} more`
-      : `，另有 ${params.entries.length - summarized.length} 条`
+      : params.language === "ru"
+        ? ` и ещё ${params.entries.length - summarized.length}`
+        : `，另有 ${params.entries.length - summarized.length} 条`
     : "";
 
   if (params.language === "en") {
     return params.mentionsCurrentChapter
       ? `Hooks are already under payoff pressure but this chapter left them untouched: ${summarized.join(", ")}${suffix}.`
       : `Hooks are already under payoff pressure without recent movement: ${summarized.join(", ")}${suffix}.`;
+  }
+
+  if (params.language === "ru") {
+    return params.mentionsCurrentChapter
+      ? `Эти хуки уже под давлением выплаты, но глава их не тронула: ${summarized.join(", ")}${suffix}.`
+      : `Эти хуки уже под давлением выплаты без недавнего движения: ${summarized.join(", ")}${suffix}.`;
   }
 
   return params.mentionsCurrentChapter
@@ -167,25 +191,25 @@ function buildPressureDescription(params: {
 
 function localizePressureLabel(
   lifecycle: ReturnType<typeof describeHookLifecycle>,
-  language: "zh" | "en",
+  language: "zh" | "en" | "ru",
 ): string {
   if (lifecycle.overdue) {
-    return language === "en" ? "overdue" : "已逾期";
+    return language === "en" ? "overdue" : language === "ru" ? "просрочен" : "已逾期";
   }
   if (lifecycle.readyToResolve) {
-    return language === "en" ? "ready to pay off" : "可回收";
+    return language === "en" ? "ready to pay off" : language === "ru" ? "готов к выплате" : "可回收";
   }
-  return language === "en" ? "stale" : "陈旧";
+  return language === "en" ? "stale" : language === "ru" ? "застой" : "陈旧";
 }
 
 function warning(
-  language: "zh" | "en",
+  language: "zh" | "en" | "ru",
   description: string,
   suggestion: string,
 ): AuditIssue {
   return {
     severity: "warning",
-    category: language === "en" ? "Hook Debt" : "伏笔债务",
+    category: language === "en" ? "Hook Debt" : language === "ru" ? "Долг по хукам" : "伏笔债务",
     description,
     suggestion,
   };

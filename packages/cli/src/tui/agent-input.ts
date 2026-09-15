@@ -166,7 +166,7 @@ export function resolveTuiAgentRoute(
   rawInput: string,
   session: InteractionSession,
   activeBookId: string | null,
-  language: "zh" | "en" = "zh",
+  language: "zh" | "en" | "ru" = "zh",
 ): TuiAgentRoute {
   const input = rawInput.trim();
   const currentKind = session.sessionKind ?? (activeBookId ? "book" : "chat");
@@ -322,7 +322,7 @@ function extractProposedAction(messages: ReadonlyArray<unknown>): PendingPropose
   return undefined;
 }
 
-function formatProposedAction(action: PendingProposedAction, language: "zh" | "en"): string {
+function formatProposedAction(action: PendingProposedAction, language: "zh" | "en" | "ru"): string {
   return language === "en"
     ? [action.title ?? "Confirm action", action.summary ?? "Confirm to continue.", "", action.instruction, "", "Type /confirm to continue, or /cancel to cancel."].join("\n")
     : [action.title ?? "确认执行", action.summary ?? "确认后继续执行。", "", action.instruction, "", "输入 /confirm 继续，或 /cancel 取消。"].join("\n");

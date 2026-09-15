@@ -13,7 +13,7 @@ import {
 } from "./session.js";
 
 type ReviseMode = "local-fix" | "rewrite";
-type RuntimeLanguage = "zh" | "en";
+type RuntimeLanguage = "zh" | "en" | "ru";
 
 export interface InteractionRuntimeTools {
   readonly listBooks: () => Promise<ReadonlyArray<string>>;
@@ -21,7 +21,7 @@ export interface InteractionRuntimeTools {
     readonly title: string;
     readonly genre?: string;
     readonly platform?: string;
-    readonly language?: "zh" | "en";
+    readonly language?: "zh" | "en" | "ru";
     readonly chapterWordCount?: number;
     readonly targetChapters?: number;
     readonly blurb?: string;
@@ -110,43 +110,33 @@ function extractToolMetadata(value: unknown): InteractionToolMetadata {
 }
 
 function resolveRuntimeLanguage(request: InteractionRequest): RuntimeLanguage {
-  return request.language === "en" ? "en" : "zh";
+  if (request.language === "en") return "en";
+  if (request.language === "ru") return "ru";
+  return "zh";
 }
 
 function localize<T>(language: RuntimeLanguage, messages: { zh: T; en: T }): T {
-  return language === "en" ? messages.en : messages.zh;
+  return language === "zh" ? messages.zh : messages.en;
 }
 
 function localizeMode(mode: AutomationMode, language: RuntimeLanguage): string {
-  if (language === "en") {
-    return mode;
+  if (language === "zh") {
+    return {
+      auto: "自动",
+      semi: "半自动",
+      manual: "手动",
+    }[mode] ?? mode;
   }
 
-  return {
-    auto: "自动",
-    semi: "半自动",
-    manual: "手动",
-  }[mode] ?? mode;
+  return mode;
 }
 
 function renderCreationDraft(
   draft: NonNullable<InteractionSession["creationDraft"]>,
   language: RuntimeLanguage,
 ): string {
-  const lines = language === "en"
+  const lines = language === "zh"
     ? [
-        "# Current Book Draft",
-        draft.title ? `- Title: ${draft.title}` : undefined,
-        draft.genre ? `- Genre: ${draft.genre}` : undefined,
-        draft.platform ? `- Platform: ${draft.platform}` : undefined,
-        draft.worldPremise ? `- World: ${draft.worldPremise}` : undefined,
-        draft.protagonist ? `- Protagonist: ${draft.protagonist}` : undefined,
-        draft.conflictCore ? `- Core Conflict: ${draft.conflictCore}` : undefined,
-        draft.volumeOutline ? `- Volume Direction: ${draft.volumeOutline}` : undefined,
-        draft.blurb ? `- Blurb: ${draft.blurb}` : undefined,
-        draft.nextQuestion ? `- Next: ${draft.nextQuestion}` : undefined,
-      ]
-    : [
         "# 当前创作草案",
         draft.title ? `- 书名：${draft.title}` : undefined,
         draft.genre ? `- 题材：${draft.genre}` : undefined,
@@ -157,6 +147,18 @@ function renderCreationDraft(
         draft.volumeOutline ? `- 卷纲方向：${draft.volumeOutline}` : undefined,
         draft.blurb ? `- 简介：${draft.blurb}` : undefined,
         draft.nextQuestion ? `- 下一步：${draft.nextQuestion}` : undefined,
+      ]
+    : [
+        "# Current Book Draft",
+        draft.title ? `- Title: ${draft.title}` : undefined,
+        draft.genre ? `- Genre: ${draft.genre}` : undefined,
+        draft.platform ? `- Platform: ${draft.platform}` : undefined,
+        draft.worldPremise ? `- World: ${draft.worldPremise}` : undefined,
+        draft.protagonist ? `- Protagonist: ${draft.protagonist}` : undefined,
+        draft.conflictCore ? `- Core Conflict: ${draft.conflictCore}` : undefined,
+        draft.volumeOutline ? `- Volume Direction: ${draft.volumeOutline}` : undefined,
+        draft.blurb ? `- Blurb: ${draft.blurb}` : undefined,
+        draft.nextQuestion ? `- Next: ${draft.nextQuestion}` : undefined,
       ];
   return lines.filter(Boolean).join("\n");
 }

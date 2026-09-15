@@ -6,7 +6,7 @@
  * Injected once during initBook/generateStyleGuide, then read by
  * writer on every chapter as part of the style_guide context.
  */
-export function buildWritingMethodologySection(language: "zh" | "en"): string {
+export function buildWritingMethodologySection(language: "zh" | "en" | "ru"): string {
   if (language === "en") {
     return buildEnglishMethodology();
   }

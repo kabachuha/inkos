@@ -196,7 +196,7 @@ export class PlannerAgent extends BaseAgent {
     readonly chapterContext?: string;
     readonly relevantHooks?: ReadonlyArray<StoredHook>;
     readonly recyclableHooks?: ReadonlyArray<StoredHook>;
-    readonly language?: "zh" | "en";
+    readonly language?: "zh" | "en" | "ru";
     readonly lengthSpec: LengthSpec;
   }): Promise<ChapterMemo> {
     const [characterMatrix, subplotBoard, emotionalArcs, bookRulesRaw] = await Promise.all([
@@ -209,16 +209,24 @@ export class PlannerAgent extends BaseAgent {
     const language = input.language ?? "zh";
     const noPriorChapter = language === "en"
       ? "(this is the opening chapter — no prior chapter)"
-      : "（本章为起始章，无前章）";
+      : language === "ru"
+        ? "(это открывающая глава — предыдущей главы нет)"
+        : "（本章为起始章，无前章）";
     const noBookRules = language === "en"
       ? "(no book_rules entries)"
-      : "（暂无 book_rules 条目）";
+      : language === "ru"
+        ? "(нет записей book_rules)"
+        : "（暂无 book_rules 条目）";
     const retryFeedbackHeader = language === "en"
       ? "## Error from previous output"
-      : "## 上次输出的错误";
+      : language === "ru"
+        ? "## Ошибка предыдущего вывода"
+        : "## 上次输出的错误";
     const retryFeedbackTrailer = language === "en"
       ? "Fix and re-emit."
-      : "请修正后重新输出。";
+      : language === "ru"
+        ? "Исправь и выведи снова."
+        : "请修正后重新输出。";
 
     const userMessage = buildPlannerUserMessage({
       chapterNumber: input.chapterNumber,
@@ -244,7 +252,7 @@ export class PlannerAgent extends BaseAgent {
         softMax: input.lengthSpec.softMax,
         hardMin: input.lengthSpec.hardMin,
         hardMax: input.lengthSpec.hardMax,
-        unit: input.lengthSpec.countingMode === "en_words" ? "words" : "字",
+        unit: language === "ru" ? "слов" : input.lengthSpec.countingMode === "en_words" ? "words" : "字",
       },
       brief: input.brief ?? "",
       chapterContext: input.chapterContext ?? "",
@@ -298,7 +306,7 @@ export class PlannerAgent extends BaseAgent {
     readonly isGoldenOpening: boolean;
     readonly fallbackGoal: string;
     readonly errorMessage: string;
-    readonly language: "zh" | "en";
+    readonly language: "zh" | "en" | "ru";
     readonly lengthSpec: LengthSpec;
   }): string {
     if (input.language === "en") {
@@ -530,8 +538,15 @@ export class PlannerAgent extends BaseAgent {
     return this.extractListItems(focusSection, limit);
   }
 
-  private renderHookBudget(activeCount: number, language: "zh" | "en"): string {
+  private renderHookBudget(activeCount: number, language: "zh" | "en" | "ru"): string {
     const cap = 12;
+    if (language === "ru") {
+      if (activeCount < 10) {
+        return `### Бюджет крючков\n- ${activeCount} активных крючков (лимит: ${cap})`;
+      }
+      const remaining = Math.max(0, cap - activeCount);
+      return `### Бюджет крючков\n- ${activeCount} активных крючков — приближение к лимиту (${cap}). Разрешено только ${remaining} новых крючков. Приоритет — раскрывать существующие, а не открывать новые линии.`;
+    }
     if (activeCount < 10) {
       return language === "en"
         ? `### Hook Budget\n- ${activeCount} active hooks (capacity: ${cap})`
@@ -821,27 +836,71 @@ export class PlannerAgent extends BaseAgent {
   private renderIntentMarkdown(
     intent: ChapterIntent,
     memo: ChapterMemo,
-    language: "zh" | "en",
+    language: "zh" | "en" | "ru",
     pendingHooks: string,
     chapterSummaries: string,
     activeHookCount: number,
   ): string {
+    const isRussian = language === "ru";
+    const none = isRussian ? "- нет" : "- none";
     const mustKeep = intent.mustKeep.length > 0
       ? intent.mustKeep.map((item) => `- ${item}`).join("\n")
-      : "- none";
+      : none;
 
     const mustAvoid = intent.mustAvoid.length > 0
       ? intent.mustAvoid.map((item) => `- ${item}`).join("\n")
-      : "- none";
+      : none;
 
     const styleEmphasis = intent.styleEmphasis.length > 0
       ? intent.styleEmphasis.map((item) => `- ${item}`).join("\n")
-      : "- none";
+      : none;
 
     const memoBody = memo.body.trim();
     const threadRefsLine = memo.threadRefs.length > 0
       ? memo.threadRefs.map((id) => `- ${id}`).join("\n")
-      : "- (none)";
+      : (isRussian ? "- (нет)" : "- (none)");
+
+    if (isRussian) {
+      return [
+        "# Намерение главы",
+        "",
+        "## Цель",
+        intent.goal,
+        "",
+        "## Узел плана",
+        intent.outlineNode ?? "(не найдено)",
+        "",
+        "## Контекст арки",
+        intent.arcContext ?? "(нет)",
+        "",
+        "## Обязательное сохранение",
+        mustKeep,
+        "",
+        "## Чего избегать",
+        mustAvoid,
+        "",
+        "## Стилевые акценты",
+        styleEmphasis,
+        "",
+        "## Мемо главы",
+        `- isGoldenOpening: ${memo.isGoldenOpening ? "true" : "false"}`,
+        "",
+        "### Связанные нити",
+        threadRefsLine,
+        "",
+        "### Тело",
+        memoBody,
+        "",
+        this.renderHookBudget(activeHookCount, language),
+        "",
+        "## Снимок ожидающих крючков",
+        pendingHooks,
+        "",
+        "## Снимок сводок глав",
+        chapterSummaries,
+        "",
+      ].join("\n");
+    }
 
     return [
       "# Chapter Intent",

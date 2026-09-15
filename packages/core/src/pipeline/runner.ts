@@ -116,7 +116,9 @@ function formatImportedChapter(
 ): string {
   return language === "en"
     ? `Chapter ${index + 1}: ${chapter.title}\n\n${content}`
-    : `第${index + 1}章 ${chapter.title}\n\n${content}`;
+    : language === "ru"
+      ? `Глава ${index + 1}: ${chapter.title}\n\n${content}`
+      : `第${index + 1}章 ${chapter.title}\n\n${content}`;
 }
 
 function estimateImportFullTextLength(
@@ -153,7 +155,9 @@ function buildTitleCatalog(
   return chapters.map((chapter, index) =>
     language === "en"
       ? `- Chapter ${index + 1}: ${chapter.title} (${chapter.content.length} chars)`
-      : `- 第${index + 1}章：${chapter.title}（${chapter.content.length}字）`,
+      : language === "ru"
+        ? `- Глава ${index + 1}: ${chapter.title} (${chapter.content.length} симв.)`
+        : `- 第${index + 1}章：${chapter.title}（${chapter.content.length}字）`,
   ).join("\n");
 }
 
@@ -165,7 +169,7 @@ function buildTitleCatalog(
 export function buildSpinoffFoundationContext(
   parentCanon: string,
   direction: string | undefined,
-  language: "zh" | "en",
+  language: "zh" | "en" | "ru",
 ): string {
   const dir = direction?.trim();
   if (language === "en") {
@@ -174,6 +178,14 @@ export function buildSpinoffFoundationContext(
       "Reuse the established characters, world, and rules from the parent canon below. Tell an INDEPENDENT side plot — a bonus arc, a character backstory, or a what-if — that does NOT advance or contradict the parent work's main storyline.",
       dir ? `\n## Side-story direction\n${dir}` : "",
       `\n## Parent canon (reuse these characters and settings)\n${parentCanon}`,
+    ].filter(Boolean).join("\n");
+  }
+  if (language === "ru") {
+    return [
+      "## Это — САЙД-СТОРИ (番外)",
+      "Переиспользуй установленные в каноне оригинала (ниже) персонажей, мир и правила. Расскажи НЕЗАВИСИМУЮ побочную историю — бонусную арку, предысторию персонажа или what-if — которая НЕ продвигает и не противоречит основному сюжету оригинала.",
+      dir ? `\n## Направление сайд-стории\n${dir}` : "",
+      `\n## Канон оригинала (переиспользуй этих персонажей и мир)\n${parentCanon}`,
     ].filter(Boolean).join("\n");
   }
   return [
@@ -204,13 +216,27 @@ export function buildImportFoundationSource(
         "",
         `The imported book has ${chapters.length} chapters. This package selects complete opening chapters, the ending/continuation point, and complete middle anchors. It also keeps the full title catalog. Unselected chapters will be replayed sequentially after foundation generation to rebuild truth files.`,
       ].join("\n")
-    : [
-        "## 导入基础设定压缩资料包",
-        "",
-        `本次导入共 ${chapters.length} 章。这里选取完整的开篇章节、结尾续写点和中段锚点，并保留完整标题目录；未选章节将在后续顺序回放中逐章分析并沉淀 truth files。`,
-      ].join("\n");
-  const catalogTitle = language === "en" ? "## Complete chapter title catalog" : "## 完整章节标题目录";
-  const anchorsTitle = language === "en" ? "## Complete source chapters selected for architecture" : "## 用于反推基础设定的完整锚点章节";
+    : language === "ru"
+      ? [
+          "## Пакет исходного материала для импорта",
+          "",
+          `В импортируемой книге ${chapters.length} глав. В этот пакет выбраны полноценные начальные главы, точка завершения/продолжения и полноценные средние якоря. Также сохранён полный каталог названий. Неотобранные главы будут последовательно проиграны после генерации фундамента для восстановления truth-файлов.`,
+        ].join("\n")
+      : [
+          "## 导入基础设定压缩资料包",
+          "",
+          `本次导入共 ${chapters.length} 章。这里选取完整的开篇章节、结尾续写点和中段锚点，并保留完整标题目录；未选章节将在后续顺序回放中逐章分析并沉淀 truth files。`,
+        ].join("\n");
+  const catalogTitle = language === "en"
+    ? "## Complete chapter title catalog"
+    : language === "ru"
+      ? "## Полный каталог названий глав"
+      : "## 完整章节标题目录";
+  const anchorsTitle = language === "en"
+    ? "## Complete source chapters selected for architecture"
+    : language === "ru"
+      ? "## Полные исходные главы, отобранные для построения фундамента"
+      : "## 用于反推基础设定的完整锚点章节";
   const anchorText = anchorIndexes
     .map((index) => {
       const chapter = chapters[index]!;
@@ -503,6 +529,12 @@ export class PipelineRunner {
     return lengthSpec.countingMode === "en_words" ? "en" : "zh";
   }
 
+  private resolveContentLanguage(raw: string | undefined): "zh" | "en" | "ru" {
+    if (raw === "en") return "en";
+    if (raw === "ru") return "ru";
+    return "zh";
+  }
+
   private logStage(language: LengthLanguage, message: { zh: string; en: string }): void {
     this.config.logger?.info(
       `${this.localize(language, { zh: "阶段：", en: "Stage: " })}${this.localize(language, message)}`,
@@ -541,7 +573,7 @@ export class PipelineRunner {
     readonly mode: "original" | "fanfic" | "series";
     readonly sourceCanon?: string;
     readonly styleGuide?: string;
-    readonly language: "zh" | "en";
+    readonly language: "zh" | "en" | "ru";
     readonly stageLanguage: LengthLanguage;
     readonly targetChapters?: number;
     readonly maxRetries?: number;
@@ -628,7 +660,7 @@ export class PipelineRunner {
       }>;
       readonly overallFeedback: string;
     },
-    language: "zh" | "en",
+    language: "zh" | "en" | "ru",
   ): string {
     const dimensionLines = review.dimensions
       .map((dimension) => (
@@ -768,7 +800,7 @@ export class PipelineRunner {
     this.logStage(stageLanguage, { zh: "生成基础设定", en: "generating foundation" });
     const { profile: gp } = await this.loadGenreProfile(book.genre);
     const reviewer = new FoundationReviewerAgent(this.agentCtxFor("foundation-reviewer", book.id));
-    const resolvedLanguage = (book.language ?? gp.language) === "en" ? "en" as const : "zh" as const;
+    const resolvedLanguage = this.resolveContentLanguage(book.language ?? gp.language);
     const foundation = await this.generateAndReviewFoundation({
       generate: (reviewFeedback) => architect.generateFoundation(
         book,
@@ -898,7 +930,7 @@ export class PipelineRunner {
     });
 
     const reviewer = new FoundationReviewerAgent(this.agentCtxFor("foundation-reviewer", bookId));
-    const resolvedLanguage = (book.language ?? "zh") === "en" ? "en" as const : "zh" as const;
+    const resolvedLanguage = this.resolveContentLanguage(book.language);
     try {
       const review = await reviewer.review({
         foundation,
@@ -981,7 +1013,16 @@ export class PipelineRunner {
   ): Promise<string> {
     const { FanficCanonImporter } = await import("../agents/fanfic-canon-importer.js");
     const importer = new FanficCanonImporter(this.agentCtxFor("fanfic-canon-importer", bookId));
-    const result = await importer.importFromText(sourceText, sourceName, fanficMode);
+
+    let language: "zh" | "en" | "ru" = "zh";
+    try {
+      const book = await this.state.loadBookConfig(bookId);
+      language = this.resolveContentLanguage(book.language ?? "zh");
+    } catch {
+      language = "zh";
+    }
+
+    const result = await importer.importFromText(sourceText, sourceName, fanficMode, language);
 
     const bookDir = this.state.bookDir(bookId);
     const storyDir = join(bookDir, "story");
@@ -1013,7 +1054,7 @@ export class PipelineRunner {
     const reviewer = new FoundationReviewerAgent(this.agentCtxFor("foundation-reviewer", book.id));
     this.logStage(stageLanguage, { zh: "生成同人基础设定", en: "generating fanfic foundation" });
     const { profile: gp } = await this.loadGenreProfile(book.genre);
-    const resolvedLanguage = (book.language ?? gp.language) === "en" ? "en" as const : "zh" as const;
+    const resolvedLanguage = this.resolveContentLanguage(book.language ?? gp.language);
     const foundation = await this.generateAndReviewFoundation({
       generate: (reviewFeedback) => architect.generateFanficFoundation(
         book,
@@ -1071,7 +1112,7 @@ export class PipelineRunner {
     const architect = new ArchitectAgent(this.agentCtxFor("architect", book.id));
     const reviewer = new FoundationReviewerAgent(this.agentCtxFor("foundation-reviewer", book.id));
     const { profile: gp } = await this.loadGenreProfile(book.genre);
-    const resolvedLanguage = (book.language ?? gp.language) === "en" ? "en" as const : "zh" as const;
+    const resolvedLanguage = this.resolveContentLanguage(book.language ?? gp.language);
     const spinoffContext = buildSpinoffFoundationContext(parentCanon, direction, resolvedLanguage);
 
     this.logStage(stageLanguage, { zh: "生成番外基础设定", en: "generating side-story foundation" });
@@ -1664,7 +1705,9 @@ export class PipelineRunner {
       const reviseLang = book.language ?? gp.language;
       const reviseHeading = reviseLang === "en"
         ? `# Chapter ${targetChapter}: ${chapterMeta.title}`
-        : `# 第${targetChapter}章 ${chapterMeta.title}`;
+        : reviseLang === "ru"
+          ? `# Глава ${targetChapter}: ${chapterMeta.title}`
+          : `# 第${targetChapter}章 ${chapterMeta.title}`;
 
       // Only the latest chapter owns current truth. Reworking an older chapter
       // invalidates its descendants, but must not rewind the live story state.
@@ -2690,7 +2733,7 @@ export class PipelineRunner {
 
     const book = await this.state.loadBookConfig(bookId);
     const { profile: gp } = await this.loadGenreProfile(book.genre);
-    const lang = (book.language ?? gp.language) === "en" ? "en" as const : "zh" as const;
+    const lang = this.resolveContentLanguage(book.language ?? gp.language);
 
     // Statistical fingerprint (language-aware: words for en, characters for zh)
     const profile = analyzeStyle(sample, sourceName, lang);
@@ -2702,12 +2745,43 @@ export class PipelineRunner {
         language: lang,
         reason: lang === "en"
           ? `The sample is short (${sample.length} chars), so this guide uses the statistical fingerprint instead of LLM qualitative extraction.`
-          : `样本文本较短（${sample.length}字），本次先使用统计指纹生成文风指南，不强行调用 LLM 做定性拆解。`,
+          : lang === "ru"
+            ? `Образец короткий (${sample.length} симв.), поэтому в этом руководстве использован статистический отпечаток вместо LLM-анализа.`
+            : `样本文本较短（${sample.length}字），本次先使用统计指纹生成文风指南，不强行调用 LLM 做定性拆解。`,
       });
     } else {
       try {
         // LLM qualitative extraction (language-aware prompt)
-        const styleSystemPrompt = lang === "en"
+        const styleSystemPrompt = lang === "ru"
+          ? `Вы — аналитик литературного стиля. Проанализируйте стиль написания эталонного текста и выделите качественные, подражаемые особенности.
+
+Формат вывода (Markdown):
+## Нарративный голос и тон
+(отстранённый / страстный / ироничный / тёплый / ..., с 1-2 цитатами из текста)
+
+## Стиль диалогов
+(общие черты речи персонажей: длина фраз, словесные тики, маркеры диалекта, ритм диалога)
+
+## Описание сцен
+(сенсорные предпочтения, выбор образов, плотность описаний, связь окружения с эмоцией)
+
+## Переходы и связки
+(как переключаются сцены, как обрабатываются скачки времени, переходы между абзацами)
+
+## Темп
+(распределение длинных и коротких фраз, предпочтения по длине абзацев, чередование кульминаций и затишья)
+
+## Лексика
+(фирменные частотные слова, метафорические/риторические склонности, степень разговорности)
+
+## Выражение эмоций
+(прямая лирика vs внешняя акция, частота и стиль внутреннего монолога)
+
+## Отличительные привычки
+(любые личные писательские привычки, стоящие подражания)
+
+Анализ должен опираться на реальные особенности текста, а не на общие места. Подкрепляйте каждый раздел 1-2 цитатами из оригинала.`
+          : lang === "en"
           ? `You are a literary style analyst. Analyze the writing style of the reference text and extract qualitative, imitable features.
 
 Output format (Markdown):
@@ -2764,9 +2838,11 @@ Base the analysis on the text's actual features, not generalities. Support each 
 （任何值得模仿的个人写作习惯）
 
 分析必须基于原文实际特征，不要泛泛而谈。每个部分用1-2个原文例句佐证。`;
-        const styleUserPrompt = lang === "en"
-          ? `Analyze the writing style of the following reference text:\n\n${sample}`
-          : `分析以下参考文本的写作风格：\n\n${sample}`;
+        const styleUserPrompt = lang === "ru"
+          ? `Проанализируйте стиль написания следующего эталонного текста:\n\n${sample}`
+          : lang === "en"
+            ? `Analyze the writing style of the following reference text:\n\n${sample}`
+            : `分析以下参考文本的写作风格：\n\n${sample}`;
         const response = await runWorkerAgent(this.config.client, this.config.model, appendActivatedSkillGuidance([
           { role: "system", content: styleSystemPrompt },
           { role: "user", content: styleUserPrompt },
@@ -2775,16 +2851,20 @@ Base the analysis on the text's actual features, not generalities. Support each 
           ? response.content
           : this.buildDeterministicStyleGuide(profile, {
               language: lang,
-              reason: lang === "en"
-                ? "The LLM returned empty style analysis; using the statistical fingerprint fallback."
-                : "LLM 未返回有效文风分析，本次使用统计指纹兜底生成文风指南。",
+              reason: lang === "ru"
+                ? `LLM не вернул корректный качественный анализ стиля. В этом прогоне использован статистический отпечаток.`
+                : lang === "en"
+                  ? "The LLM returned empty style analysis; using the statistical fingerprint fallback."
+                  : "LLM 未返回有效文风分析，本次使用统计指纹兜底生成文风指南。",
             });
       } catch (error) {
         qualitativeGuide = this.buildDeterministicStyleGuide(profile, {
           language: lang,
-          reason: lang === "en"
-            ? `LLM qualitative extraction failed: ${error instanceof Error ? error.message : String(error)}. Using the statistical fingerprint fallback.`
-            : `LLM 定性拆解失败：${error instanceof Error ? error.message : String(error)}。本次使用统计指纹兜底生成文风指南。`,
+          reason: lang === "ru"
+            ? `LLM-анализ стиля не удался: ${error instanceof Error ? error.message : String(error)}. Использован статистический отпечаток.`
+            : lang === "en"
+              ? `LLM qualitative extraction failed: ${error instanceof Error ? error.message : String(error)}. Using the statistical fingerprint fallback.`
+              : `LLM 定性拆解失败：${error instanceof Error ? error.message : String(error)}。本次使用统计指纹兜底生成文风指南。`,
         });
       }
     }
@@ -2805,8 +2885,30 @@ Base the analysis on the text's actual features, not generalities. Support each 
       readonly rhetoricalFeatures: ReadonlyArray<string>;
       readonly sourceName?: string;
     },
-    options: { readonly language: "zh" | "en"; readonly reason: string },
+    options: { readonly language: "zh" | "en" | "ru"; readonly reason: string },
   ): string {
+    if (options.language === "ru") {
+      return [
+        "# Стиль-гид",
+        "",
+        `> ${options.reason}`,
+        "",
+        "## Статистический отпечаток стиля",
+        `- Источник: ${profile.sourceName ?? "unknown"}`,
+        `- Средняя длина предложения: ${profile.avgSentenceLength}`,
+        `- Разброс длины предложений: ${profile.sentenceLengthStdDev}`,
+        `- Средняя длина абзаца: ${profile.avgParagraphLength}`,
+        `- Разнообразие лексики: ${Math.round(profile.vocabularyDiversity * 100)}%`,
+        profile.topPatterns.length > 0 ? `- Повторяющиеся начала: ${profile.topPatterns.join(", ")}` : "- Повторяющиеся начала: в этом образце не выражены",
+        profile.rhetoricalFeatures.length > 0 ? `- Риторические черты: ${profile.rhetoricalFeatures.join(", ")}` : "- Риторические черты: в этом образце не выражены",
+        "",
+        "## Как использовать",
+        "- Рассматривайте это как лёгкий стилевой отпечаток, а не полноценную библию имитации.",
+        "- При написании держите ритм предложений и абзацев близким к образцу.",
+        "- Если гид кажется слишком тонким, позже импортируйте более длинный фрагмент; файл будет заменён.",
+      ].join("\n");
+    }
+
     if (options.language === "en") {
       return [
         "# Style Guide",
@@ -3058,7 +3160,7 @@ ${matrix}`,
               generate: (reviewFeedback) => architect.generateFoundationFromImport(book, foundationSource, undefined, reviewFeedback, { importMode: "series" }),
               reviewer: new FoundationReviewerAgent(this.agentCtxFor("foundation-reviewer", input.bookId)),
               mode: "series",
-              language: resolvedLanguage === "en" ? "en" : "zh",
+              language: resolvedLanguage,
               stageLanguage: resolvedLanguage,
               targetChapters: book.targetChapters,
             })

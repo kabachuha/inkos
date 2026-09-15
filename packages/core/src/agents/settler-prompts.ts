@@ -6,14 +6,91 @@ export function buildSettlerSystemPrompt(
   book: BookConfig,
   genreProfile: GenreProfile,
   bookRules: BookRules | null,
-  language?: "zh" | "en",
+  language?: "zh" | "en" | "ru",
 ): string {
   const resolvedLang = language ?? genreProfile.language;
   const isEnglish = resolvedLang === "en";
-  const numericalBlock = genreProfile.numericalSystem
-    ? `\n- 本题材有数值/资源体系，你必须在 UPDATED_LEDGER 中追踪正文中出现的所有资源变动
+  const isRussian = resolvedLang === "ru";
+  const numericalBlock = isRussian
+    ? (genreProfile.numericalSystem
+      ? `\n- В этом жанре есть числовая/ресурсная система: ты ОБЯЗАН отслеживать в UPDATED_LEDGER все изменения ресурсов, упомянутые в прозе
+- Жёсткое правило арифметики: начальные + прирост = конечные, три значения должны быть проверимы`
+      : `\n- В этом жанре нет числовой системы — UPDATED_LEDGER оставь пустым`)
+    : genreProfile.numericalSystem
+      ? `\n- 本题材有数值/资源体系，你必须在 UPDATED_LEDGER 中追踪正文中出现的所有资源变动
 - 数值验算铁律：期初 + 增量 = 期末，三项必须可验算`
-    : `\n- 本题材无数值系统，UPDATED_LEDGER 留空`;
+      : `\n- 本题材无数值系统，UPDATED_LEDGER 留空`;
+
+  if (isRussian) {
+    const ruHookRules = `
+## Правила отслеживания крючков (выполнять строго)
+
+- Новый крючок: добавляй новый hook_id только когда в прозе появляется нерешённый вопрос, который будет развиваться в следующих главах и имеет конкретное направление раскрытия. Не открывай новый hook для перефразировки, пересказа или абстрактного резюме старого hook
+- Упоминание крючка: существующий крючок упомянут в этой главе, но новой информации нет, понимание читателя или персонажей не изменилось → положи в массив mention, не обновляй «последнее продвижение»
+- Продвижение крючка: по существующему крючку в этой главе появились новые факты, доказательства, сдвиг отношений, эскалация риска или сужение масштаба → **обязан** обновить столбец «последнее продвижение» до номера текущей главы, обновить статус и примечания
+- Раскрытие крючка: крючок в этой главе явно раскрыт, решён или больше не действует → статус меняется на «resolved», в примечаниях — способ раскрытия
+- Откладывание крючка: помечай «отложен» только когда проза явно показывает, что линия намеренно отложена, ушла в фон или придавлена сюжетом; не откладывай механически просто потому, что «прошло несколько глав»
+- Текущий пул крючков одновременно даёт активные крючки и спящие семена, семантически связанные с главой. Спящий не значит нерелевантный: если эта глава запускает, переписывает или конкретизирует его — ОБЯЗАН переиспользовать его hookId и обновить статус, направление раскрытия и примечания в hookOps.upsert
+- Твоя семантическая обязанность — решить, «является ли новое формулирование прозы тем же нарративным обещанием». Даже если персонажи, цифры, форма доказательств или слова меняются, но это подхватывает тот же тайна/конфликт/обещание раскрытия — обновляй существующий hookId, не открывай новый кандидат
+- newHookCandidates — только для совершенно новых нарративных обещаний, которых нет ни в одном из текущего пула. Хост проверяет только структуру, не будет гадать семантику по ключевым словам
+- payoffTiming использует семантический темп, без жёстких номеров глав: допускаются только immediate / near-term / mid-arc / slow-burn / endgame
+- **Жёсткое правило**: не принимай «снова упомянули», «перефразировали», «абстрактный разбор» за продвижение. Обновляй «последнее продвижение» только когда статус реально изменился. Старый hook, просто появившийся, — в массив mention.`;
+
+    const ruFullCastBlock = bookRules?.enableFullCastTracking
+      ? `\n## Полное отслеживание каста\nPOST_SETTLEMENT должен дополнительно содержать: список персонажей, вышедших в этой главе; изменения отношений между персонажами; персонажей, упомянутых, но не вышедших.`
+      : "";
+
+    const ruLangPrefix = `【ПЕРЕОПРЕДЕЛЕНИЕ ЯЗЫКА】Весь вывод (карточка состояния, крючки, сводки, подсюжеты, эмоциональные дуги, матрица персонажей) ОБЯЗАН быть на русском языке. Теги === TAG === и ключи JSON остаются без изменений (на английском).\n\n`;
+
+    return `${ruLangPrefix}Ты — аналитик отслеживания состояния. Дана проза новой главы и текущие truth-файлы; твоя задача — произвести обновлённые truth-файлы.
+
+## Режим работы
+
+Ты не пишешь прозу. Твоя задача:
+1. Внимательно прочитать прозу, извлечь все изменения состояния
+2. Сделать инкрементальное обновление на основе «текущих файлов отслеживания»
+3. Строго следовать формату === TAG ===
+
+## Измерения анализа
+
+Извлечь из прозы:
+- выход/уход/изменение состояния персонажей (рана/прорыв/смерть и т.д.)
+- перемещения, смены сцен
+- получение/потраченное имущество и ресурсы
+- заложение, продвижение, раскрытие крючков
+- изменения эмоциональных дуг
+- прогресс подсюжетов
+- изменения отношений между персонажами, новые границы информации
+
+## Информация о книге
+
+- Название: ${book.title}
+- Жанр: ${genreProfile.name} (${book.genre})
+- Платформа: ${book.platform}
+${numericalBlock}
+${ruHookRules}${ruFullCastBlock}
+
+## Формат вывода (соблюдать строго)
+
+${buildSettlerOutputFormat(genreProfile, "ru")}
+
+## Ключевые правила
+
+1. Карточка состояния и пул крючков обновляются инкрементально на основе «текущих файлов отслеживания», а не с нуля
+2. Каждое фактическое изменение в прозе должно быть отражено в соответствующем файле отслеживания
+3. Не пропускать детали: числовые, пространственные, отношенческие и информационные изменения — всё записывать
+4. «Границы информации» в матрице взаимодействия персонажей — точно: персонаж знает только то, что происходило при нём
+
+## Жёсткое правило: записывать только то, что реально произошло в прозе (выполнять строго)
+
+- **Извлекать только явно описанные в прозе события и изменения состояния**. Не додумывать, не предсказывать, не дополнять то, чего проза не пишет
+- Если проза описывает только то, что персонаж дошёл до двери, но не вошёл, — в карточке состояния нельзя писать «персонаж вошёл в комнату»
+- Если проза лишь намекает на возможность, но не подтверждает её, — не записывать как свершившийся факт
+- Не дописывать в карточку состояния сюжет из карты тома, которого проза ещё не достигла
+- Не удалять и не править в существующих hooks то, что не связано с этой главой — обновлять только hooks, затронутые прозой этой главы
+- Глава 1 — особенно внимательно: начальные файлы отслеживания могут содержать предсгенерированное из контента, — оставить только то, что реально подкреплено прозой
+- **Исключение для крючков**: нерешённые вопросы, тайны, зацепки в прозе ОБЯЗАНЫ быть записаны в hooks. Это не «домысел», а «извлечение нарративного обещания из прозы». Если проза намекает на тайну/конфликт/секрет без раскрытия — это hook, его надо записать`;
+  }
 
   const hookRules = `
 ## 伏笔追踪规则（严格执行）
@@ -87,10 +164,80 @@ ${buildSettlerOutputFormat(genreProfile)}
 - **伏笔例外**：正文中出现的未解疑问、悬念、伏笔线索必须在 hooks 中记录。这不是"推断"，而是"提取正文中的叙事承诺"。如果正文暗示了一个谜题/冲突/秘密但没有解答，那就是一个 hook，必须记录`;
 }
 
-function buildSettlerOutputFormat(gp: GenreProfile): string {
+function buildSettlerOutputFormat(gp: GenreProfile, language: "zh" | "en" | "ru" = "zh"): string {
   const chapterTypeExample = gp.chapterTypes.length > 0
     ? gp.chapterTypes[0]
     : "主线推进";
+
+  if (language === "ru") {
+    return `=== POST_SETTLEMENT ===
+(Кратко: какие изменения состояния, продвижения крючков, расчётные примечания есть в этой главе; допустимы Markdown-таблица или пункты)
+
+=== RUNTIME_STATE_DELTA ===
+(Вывести ОБЯЗАТЕЛЬНО JSON, без Markdown, без пояснений. Ключи JSON — строго на английском, как в схеме ниже; текстовые значения — на русском.)
+\`\`\`json
+{
+  "chapter": 12,
+  "currentStatePatch": {
+    "currentLocation": "опционально",
+    "protagonistState": "опционально",
+    "currentGoal": "опционально",
+    "currentConstraint": "опционально",
+    "currentAlliances": "опционально",
+    "currentConflict": "опционально"
+  },
+  "hookOps": {
+    "upsert": [
+      {
+        "hookId": "mentor-oath",
+        "startChapter": 8,
+        "type": "relationship",
+        "status": "progressing",
+        "lastAdvancedChapter": 12,
+        "expectedPayoff": "раскрыть правду о долге учителя",
+        "payoffTiming": "slow-burn",
+        "notes": "почему в этой главе продвинуто / отложено / раскрыто"
+      }
+    ],
+    "mention": ["hookId, который в этой главе лишь упомянут без реального продвижения"],
+    "resolve": ["hookId, уже раскрыт"],
+    "defer": ["hookId, который надо пометить отложенным"]
+  },
+  "newHookCandidates": [
+    {
+      "type": "mystery",
+      "expectedPayoff": "куда новый крючок в будущем должен раскрыться",
+      "payoffTiming": "near-term",
+      "notes": "почему в этой главе возник новый нерешённый вопрос"
+    }
+  ],
+  "chapterSummary": {
+    "chapter": 12,
+    "title": "заголовок этой главы",
+    "characters": "Перс1, Перс2",
+    "events": "одной строкой ключевые события",
+    "stateChanges": "одной строкой изменения состояния",
+    "hookActivity": "mentor-oath advanced",
+    "mood": "напряжение",
+    "chapterType": "${chapterTypeExample}"
+  },
+  "subplotOps": [],
+  "emotionalArcOps": [],
+  "characterMatrixOps": [],
+  "notes": []
+}
+\`\`\`
+
+Правила:
+1. Выводить только дельту, не переписывать полные truth-файлы
+2. Все поля номеров глав — целые числа, без естественного языка
+3. В hookOps.upsert — только hookId, которые «уже существуют в текущем пуле крючков», запрещён новый hookId; если семантически подхватывается существующий крючок — переиспользовать его id
+4. Только при уверенности, что в текущем пуле нет того же нарративного обещания, совершенно новая нерешённая линия пишется в newHookCandidates
+5. Если старый hook лишь упомянут, без реального изменения состояния — положить в mention, не обновлять lastAdvancedChapter
+6. Если в этой главе продвинут старый hook — lastAdvancedChapter обязан равняться номеру текущей главы
+7. Если крючок раскрыт или отложен — обязательно в массивы resolve / defer
+8. chapterSummary.chapter обязан равняться номеру текущей главы`;
+  }
 
   return `=== POST_SETTLEMENT ===
 （简要说明本章有哪些状态变动、伏笔推进、结算注意事项；允许 Markdown 表格或要点）
@@ -177,40 +324,73 @@ export function buildSettlerUserPrompt(params: {
   readonly selectedEvidenceBlock?: string;
   readonly governedControlBlock?: string;
   readonly validationFeedback?: string;
+  readonly language?: "zh" | "en" | "ru";
 }): string {
-  const ledgerBlock = params.ledger
-    ? `\n## 当前资源账本\n${params.ledger}\n`
-    : "";
+  const isRussian = params.language === "ru";
 
-  const summariesBlock = params.chapterSummaries !== "(文件尚未创建)"
-    ? `\n## 已有章节摘要\n${params.chapterSummaries}\n`
-    : "";
+  const ledgerBlock = isRussian
+    ? (params.ledger ? `\n## Текущая смета ресурсов\n${params.ledger}\n` : "")
+    : (params.ledger ? `\n## 当前资源账本\n${params.ledger}\n` : "");
 
-  const subplotBlock = params.subplotBoard !== "(文件尚未创建)"
-    ? `\n## 当前支线进度板\n${params.subplotBoard}\n`
-    : "";
+  const summariesBlock = isRussian
+    ? (params.chapterSummaries !== "(文件尚未创建)" ? `\n## Сводки прошлых глав\n${params.chapterSummaries}\n` : "")
+    : (params.chapterSummaries !== "(文件尚未创建)" ? `\n## 已有章节摘要\n${params.chapterSummaries}\n` : "");
 
-  const emotionalBlock = params.emotionalArcs !== "(文件尚未创建)"
-    ? `\n## 当前情感弧线\n${params.emotionalArcs}\n`
-    : "";
+  const subplotBlock = isRussian
+    ? (params.subplotBoard !== "(文件尚未创建)" ? `\n## Текущая доска подсюжетов\n${params.subplotBoard}\n` : "")
+    : (params.subplotBoard !== "(文件尚未创建)" ? `\n## 当前支线进度板\n${params.subplotBoard}\n` : "");
 
-  const matrixBlock = params.characterMatrix !== "(文件尚未创建)"
-    ? `\n## 当前角色交互矩阵\n${params.characterMatrix}\n`
-    : "";
+  const emotionalBlock = isRussian
+    ? (params.emotionalArcs !== "(文件尚未创建)" ? `\n## Текущие эмоциональные дуги\n${params.emotionalArcs}\n` : "")
+    : (params.emotionalArcs !== "(文件尚未创建)" ? `\n## 当前情感弧线\n${params.emotionalArcs}\n` : "");
 
-  const observationsBlock = params.observations
-    ? `\n## 观察日志（由 Observer 提取，包含本章所有事实变化）\n${params.observations}\n\n基于以上观察日志和正文，更新所有追踪文件。确保观察日志中的每一项变化都反映在对应的文件中。\n`
-    : "";
-  const selectedEvidenceBlock = params.selectedEvidenceBlock
-    ? `\n## 已选长程证据\n${params.selectedEvidenceBlock}\n`
-    : "";
+  const matrixBlock = isRussian
+    ? (params.characterMatrix !== "(文件尚未创建)" ? `\n## Текущая матрица взаимодействия персонажей\n${params.characterMatrix}\n` : "")
+    : (params.characterMatrix !== "(文件尚未创建)" ? `\n## 当前角色交互矩阵\n${params.characterMatrix}\n` : "");
+
+  const observationsBlock = isRussian
+    ? (params.observations
+      ? `\n## Журнал наблюдений (извлечён Observer, содержит все фактические изменения этой главы)\n${params.observations}\n\nНа основе этого журнала наблюдений и прозы обновите все файлы отслеживания. Убедитесь, что каждое изменение из журнала отражено в соответствующем файле.\n`
+      : "")
+    : (params.observations
+      ? `\n## 观察日志（由 Observer 提取，包含本章所有事实变化）\n${params.observations}\n\n基于以上观察日志和正文，更新所有追踪文件。确保观察日志中的每一项变化都反映在对应的文件中。\n`
+      : "");
+  const selectedEvidenceBlock = isRussian
+    ? (params.selectedEvidenceBlock ? `\n## Выбранные долгосрочные доказательства\n${params.selectedEvidenceBlock}\n` : "")
+    : (params.selectedEvidenceBlock ? `\n## 已选长程证据\n${params.selectedEvidenceBlock}\n` : "");
   const controlBlock = params.governedControlBlock ?? "";
   const outlineBlock = controlBlock.length === 0
-    ? `\n## 卷纲\n${params.volumeOutline}\n`
+    ? (isRussian
+      ? `\n## Карта тома\n${params.volumeOutline}\n`
+      : `\n## 卷纲\n${params.volumeOutline}\n`)
     : "";
-  const validationFeedbackBlock = params.validationFeedback
-    ? `\n## 状态校验反馈\n${params.validationFeedback}\n\n请严格纠正这些矛盾，只修正 truth files，不要改写正文，不要引入正文中不存在的新事实。\n`
-    : "";
+  const validationFeedbackBlock = isRussian
+    ? (params.validationFeedback
+      ? `\n## Обратная связь валидации состояния\n${params.validationFeedback}\n\nИсправьте эти противоречия строго, правьте только truth files, не переписывайте прозу, не вносите новые факты, которых нет в прозе.\n`
+      : "")
+    : (params.validationFeedback
+      ? `\n## 状态校验反馈\n${params.validationFeedback}\n\n请严格纠正这些矛盾，只修正 truth files，不要改写正文，不要引入正文中不存在的新事实。\n`
+      : "");
+
+  if (isRussian) {
+    return `Проанализируй прозу главы ${params.chapterNumber} «${params.title}» и обнови все файлы отслеживания.
+${observationsBlock}
+${validationFeedbackBlock}
+## Проза этой главы
+
+${params.content}
+${controlBlock}
+
+## Текущая карточка состояния
+${params.currentState}
+${ledgerBlock}
+## Текущий пул крючков (включая активные крючки и спящие семена, семантически связанные с главой)
+${params.hooks}
+${selectedEvidenceBlock}${summariesBlock}${subplotBlock}${emotionalBlock}${matrixBlock}
+${outlineBlock}
+
+Выведи результат расчёта строго в формате === TAG ===.`;
+  }
 
   return `请分析第${params.chapterNumber}章「${params.title}」的正文，更新所有追踪文件。
 ${observationsBlock}

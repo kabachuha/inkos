@@ -208,10 +208,17 @@ async function loadLegacyIntentPlan(
     return null;
   }
 
-  const rawGoal = extractSection(intentMarkdown, "Goal");
+  const section = (heading: string, russianHeading: string): string | undefined =>
+    extractSection(intentMarkdown, heading) ?? extractSection(intentMarkdown, russianHeading);
+  const listSection = (heading: string, russianHeading: string): string[] =>
+    extractListSection(intentMarkdown, heading).length > 0
+      ? extractListSection(intentMarkdown, heading)
+      : extractListSection(intentMarkdown, russianHeading);
+
+  const rawGoal = section("Goal", "Цель");
   if (!rawGoal || !isMeaningfulLegacyValue(rawGoal)) return null;
   const goal = rawGoal;
-  const outlineNodeRaw = extractSection(intentMarkdown, "Outline Node");
+  const outlineNodeRaw = section("Outline Node", "Узел плана");
   const outlineNode = outlineNodeRaw && isMeaningfulLegacyValue(outlineNodeRaw)
     ? outlineNodeRaw
     : undefined;
@@ -220,9 +227,9 @@ async function loadLegacyIntentPlan(
     chapter: chapterNumber,
     goal,
     outlineNode,
-    mustKeep: extractListSection(intentMarkdown, "Must Keep"),
-    mustAvoid: extractListSection(intentMarkdown, "Must Avoid"),
-    styleEmphasis: extractListSection(intentMarkdown, "Style Emphasis"),
+    mustKeep: listSection("Must Keep", "Обязательное сохранение"),
+    mustAvoid: listSection("Must Avoid", "Чего избегать"),
+    styleEmphasis: listSection("Style Emphasis", "Стилевые акценты"),
   });
 
   return {

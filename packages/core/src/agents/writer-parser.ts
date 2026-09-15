@@ -61,6 +61,10 @@ function fallbackExtractContent(raw: string, countingMode: LengthCountingMode): 
     if (englishHeadingMatch) {
       return englishHeadingMatch[2]!.trim();
     }
+    const russianHeadingMatch = raw.match(/^#\s*Глава\s+\d+(?::|\s+)([^\n]*)\n+([\s\S]+)/im);
+    if (russianHeadingMatch) {
+      return russianHeadingMatch[2]!.trim();
+    }
   }
 
   // Try "正文" or "内容" labeled section
@@ -70,7 +74,7 @@ function fallbackExtractContent(raw: string, countingMode: LengthCountingMode): 
   }
 
   if (countingMode === "en_words") {
-    const englishLabelMatch = raw.match(/(?:content|chapter content)[：:]\s*\n+([\s\S]+)/i);
+    const englishLabelMatch = raw.match(/(?:content|chapter content|текст главы|содержание главы)[：:]\s*\n+([\s\S]+)/i);
     if (englishLabelMatch) {
       return englishLabelMatch[1]!.trim();
     }
@@ -108,9 +112,13 @@ function fallbackExtractTitle(
     if (englishHeadingMatch) {
       return englishHeadingMatch[1]!.trim();
     }
+    const russianHeadingMatch = raw.match(/^#\s*Глава\s+\d+(?::|\s+)\s*(.+)/im);
+    if (russianHeadingMatch) {
+      return russianHeadingMatch[1]!.trim();
+    }
   }
   // Try: 章节标题：Title or CHAPTER_TITLE: Title (without === delimiters)
-  const labelMatch = raw.match(/(?:章节标题|CHAPTER_TITLE)[：:]\s*(.+)/);
+  const labelMatch = raw.match(/(?:章节标题|CHAPTER_TITLE|название главы)[：:]\s*(.+)/i);
   if (labelMatch) {
     return labelMatch[1]!.trim();
   }

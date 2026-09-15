@@ -15,6 +15,7 @@ const HOOK_STATUS_ALIASES: ReadonlyMap<string, HookStatus> = new Map([
   ...[
     "resolved", "closed", "done", "paid_off", "paid-off", "paid off",
     "已回收", "回收", "完成", "已解决", "已兑现", "兑现",
+    "раскрыт", "закрыт", "разрешён", "исполнен", "выплачен",
   ].map((value) => [value, "resolved"] as const),
   ...[
     "deferred", "paused", "hold", "dormant", "sleeping", "inactive",
@@ -22,14 +23,18 @@ const HOOK_STATUS_ALIASES: ReadonlyMap<string, HookStatus> = new Map([
     "not_active", "not-active", "not active", "搁置", "延后", "延期", "暂缓",
     "休眠", "未激活", "未开启", "待开启", "未启动", "待启动", "未推进",
     "尚未推进", "待推进",
+    "отложен", "приостановлен", "в спящем режиме", "не начат", "не активен",
+    "не запущен", "ждёт запуска", "не продвигается",
   ].map((value) => [value, "deferred"] as const),
   ...[
     "progressing", "advanced", "progress", "active", "pressured", "confirmed",
     "confirmed_hit", "confirmed-hit", "confirmed hit", "命中", "已确认命中", "已推进",
     "推进", "进行中", "持续推进", "重大推进",
+    "в процессе", "продвигается", "активен", "под давлением", "подтверждено",
   ].map((value) => [value, "progressing"] as const),
   ...[
     "open", "pending", "seeded", "planted", "待定", "未回收", "已埋", "已种下", "已铺垫",
+    "открыт", "в ожидании", "сеяно", "заложено", "засеяно",
   ].map((value) => [value, "open"] as const),
 ]);
 
@@ -87,7 +92,7 @@ export function isHookWithinChapterWindow(
   return hook.startChapter > chapterNumber && hook.startChapter <= chapterNumber + lookahead;
 }
 
-const LABELS: Record<"zh" | "en", Record<HookPayoffTiming, string>> = {
+const LABELS: Record<"zh" | "en" | "ru", Record<HookPayoffTiming, string>> = {
   en: {
     immediate: "immediate",
     "near-term": "near-term",
@@ -102,22 +107,29 @@ const LABELS: Record<"zh" | "en", Record<HookPayoffTiming, string>> = {
     "slow-burn": "慢烧",
     endgame: "终局",
   },
+  ru: {
+    immediate: "немедленно",
+    "near-term": "ближайшие главы",
+    "mid-arc": "середина арки",
+    "slow-burn": "долгий",
+    endgame: "финал",
+  },
 };
 
 const TIMING_ALIASES: Array<[HookPayoffTiming, RegExp]> = [
-  ["immediate", /^(?:立即|马上|当章|本章|下一章|immediate|instant|next(?:\s+chapter|\s+beat)?|right\s+away)$/i],
-  ["near-term", /^(?:近期|近几章|短线|soon|short(?:\s+run)?|near(?:\s*-\s*|\s+)term|current\s+sequence)$/i],
-  ["mid-arc", /^(?:中程|中期|卷中|mid(?:\s*-\s*|\s+)arc|mid(?:\s*-\s*|\s+)book|middle)$/i],
-  ["slow-burn", /^(?:慢烧|长线|后续|later|late(?:r)?|long(?:\s*-\s*|\s+)arc|slow(?:\s*-\s*|\s+)burn)$/i],
-  ["endgame", /^(?:终局|终章|大结局|最终|climax|finale|endgame|late\s+book)$/i],
+  ["immediate", /^(?:立即|马上|当章|本章|下一章|немедленно|сразу|в\s+(?:этой|данной)\s+(?:главе|сцене)|именно\s+здесь|immediate|instant|next(?:\s+chapter|\s+beat)?|right\s+away)$/i],
+  ["near-term", /^(?:近期|近几章|短线|скоро|в\s+ближайших\s+главах|ближайшие\s+главы|soon|short(?:\s+run)?|near(?:\s*-\s*|\s+)term|current\s+sequence)$/i],
+  ["mid-arc", /^(?:中程|中期|卷中|к\s+середине\s+(?:арки|книги|тома)|середина\s+(?:арки|книги|тома)|mid(?:\s*-\s*|\s+)arc|mid(?:\s*-\s*|\s+)book|middle)$/i],
+  ["slow-burn", /^(?:慢烧|长线|后续|долгие\s+главы|постепенно|медленный|на\s+долгую\s+перспективу|later|late(?:r)?|long(?:\s*-\s*|\s+)arc|slow(?:\s*-\s*|\s+)burn)$/i],
+  ["endgame", /^(?:终局|终章|大结局|最终|финал|кульминация|развязка|climax|finale|endgame|late\s+book)$/i],
 ];
 
 const SIGNAL_PATTERNS: Array<[HookPayoffTiming, RegExp]> = [
-  ["endgame", /(终局|终章|大结局|最终揭晓|最终摊牌|climax|finale|endgame|final reveal|last act)/i],
-  ["immediate", /(当章|本章|下一章|马上|立刻|即刻|immediate|next chapter|right away|at once)/i],
-  ["near-term", /(近期|近几章|很快|短线|soon|near-term|short run|current sequence)/i],
-  ["mid-arc", /(中期|卷中|本卷中段|mid-book|mid arc|middle of the arc)/i],
-  ["slow-burn", /(长线|慢烧|后续发酵|慢慢揭开|later|slow burn|long arc|long tail)/i],
+  ["endgame", /(终局|终章|大结局|最终揭晓|最终摊牌|финале|кульминаци|развязк|в\s+финале|climax|finale|endgame|final reveal|last act)/i],
+  ["immediate", /(当章|本章|下一章|马上|立刻|即刻|немедленно|сразу|в\s+этой\s+главе|immediate|next chapter|right away|at once)/i],
+  ["near-term", /(近期|近几章|很快|短线|скоро|ближайших\s+главах|soon|near-term|short run|current sequence)/i],
+  ["mid-arc", /(中期|卷中|本卷中段|середина\s+(?:арки|книги|тома)|к\s+середине|mid-book|mid arc|middle of the arc)/i],
+  ["slow-burn", /(长线|慢烧|后续发酵|慢慢揭开|постепенно|на\s+долгую\s+перспективу|later|slow burn|long arc|long tail)/i],
 ];
 
 export function normalizeHookPayoffTiming(value: string | undefined | null): HookPayoffTiming | undefined {
@@ -166,7 +178,7 @@ export function resolveHookPayoffTiming(params: {
 
 export function localizeHookPayoffTiming(
   timing: HookPayoffTiming,
-  language: "zh" | "en",
+  language: "zh" | "en" | "ru",
 ): string {
   return LABELS[language][timing];
 }

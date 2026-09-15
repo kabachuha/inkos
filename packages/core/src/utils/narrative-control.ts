@@ -22,14 +22,16 @@ const EN_REPLACEMENTS: ReadonlyArray<[RegExp, string]> = [
 
 export function sanitizeNarrativeControlText(
   text: string,
-  language: "zh" | "en" = "zh",
+  language: "zh" | "en" | "ru" = "zh",
 ): string {
   let result = text;
+  const threadRef = language === "en" ? "this thread" : language === "ru" ? "эта линия" : "这条线索";
+  const chapterRef = language === "en" ? "an earlier scene" : language === "ru" ? "ранняя сцена" : "此前";
 
-  result = result.replace(HOOK_ID_PATTERN, language === "en" ? "this thread" : "这条线索");
-  result = result.replace(HOOK_SLUG_PATTERN, language === "en" ? "this thread" : "这条线索");
+  result = result.replace(HOOK_ID_PATTERN, threadRef);
+  result = result.replace(HOOK_SLUG_PATTERN, threadRef);
   for (const pattern of CHAPTER_REF_PATTERNS) {
-    result = result.replace(pattern, language === "en" ? "an earlier scene" : "此前");
+    result = result.replace(pattern, chapterRef);
   }
 
   for (const [pattern, replacement] of [...ZH_REPLACEMENTS, ...EN_REPLACEMENTS]) {
@@ -51,27 +53,35 @@ export function sanitizeNarrativeControlText(
 export function renderMemoAsNarrativeBlock(
   memo: ChapterMemo,
   intent: ChapterIntent | undefined,
-  language: "zh" | "en" = "zh",
+  language: "zh" | "en" | "ru" = "zh",
 ): string {
   const s = (text: string) => sanitizeNarrativeControlText(text, language);
   const isEn = language === "en";
+  const isRu = language === "ru";
+  const goalLabel = isEn ? "Goal" : isRu ? "Цель" : "目标";
+  const arcLabel = isEn ? "Arc Context" : isRu ? "Контекст арки" : "弧线背景";
+  const threadLabel = isEn ? "Thread Refs" : isRu ? "Связанные нити" : "关联线索";
+  const goldenLabel = isEn ? "Golden Opening" : isRu ? "Золотое открытие" : "黄金开场";
+  const goldenNote = isEn
+    ? "This is a golden opening chapter — prioritize hook-dense, high-tempo pacing."
+    : isRu
+      ? "Это золотая открывающая глава — приоритет на плотные крючки и высокий темп."
+      : "本章是黄金开场章——优先钩子密集、高节奏。";
   const sections: string[] = [];
 
-  sections.push(`## ${isEn ? "Goal" : "目标"}\n- ${s(memo.goal)}`);
+  sections.push(`## ${goalLabel}\n- ${s(memo.goal)}`);
 
   if (intent?.arcContext) {
-    sections.push(`## ${isEn ? "Arc Context" : "弧线背景"}\n- ${s(intent.arcContext)}`);
+    sections.push(`## ${arcLabel}\n- ${s(intent.arcContext)}`);
   }
 
   if (memo.threadRefs.length > 0) {
     const threads = memo.threadRefs.map((id) => `- ${id}`).join("\n");
-    sections.push(`## ${isEn ? "Thread Refs" : "关联线索"}\n${threads}`);
+    sections.push(`## ${threadLabel}\n${threads}`);
   }
 
   if (memo.isGoldenOpening) {
-    sections.push(
-      `## ${isEn ? "Golden Opening" : "黄金开场"}\n- ${isEn ? "This is a golden opening chapter — prioritize hook-dense, high-tempo pacing." : "本章是黄金开场章——优先钩子密集、高节奏。"}`,
-    );
+    sections.push(`## ${goldenLabel}\n- ${goldenNote}`);
   }
 
   // Emit the 7-section memo body at top level so each heading is a task.
@@ -84,16 +94,26 @@ export function renderMemoAsNarrativeBlock(
 
 export function buildNarrativeIntentBrief(
   chapterIntent: string,
-  language: "zh" | "en" = "zh",
+  language: "zh" | "en" | "ru" = "zh",
 ): string {
-  const sections = [
-    { heading: "## Goal", label: language === "en" ? "Goal" : "目标" },
-    { heading: "## Outline Node", label: language === "en" ? "Outline Node" : "当前节点" },
-    { heading: "## Must Keep", label: language === "en" ? "Keep" : "保留" },
-    { heading: "## Must Avoid", label: language === "en" ? "Avoid" : "避免" },
-    { heading: "## Style Emphasis", label: language === "en" ? "Style" : "风格" },
-    { heading: "## Structured Directives", label: language === "en" ? "Directives" : "指令" },
-  ] as const;
+  const sections: ReadonlyArray<{ heading: string; label: string }> =
+    language === "ru"
+      ? [
+          { heading: "## Цель", label: "Цель" },
+          { heading: "## Узел плана", label: "Узел плана" },
+          { heading: "## Обязательное сохранение", label: "Сохранить" },
+          { heading: "## Чего избегать", label: "Избегать" },
+          { heading: "## Стилевые акценты", label: "Стиль" },
+          { heading: "## Структурные директивы", label: "Директивы" },
+        ]
+      : [
+          { heading: "## Goal", label: language === "en" ? "Goal" : "目标" },
+          { heading: "## Outline Node", label: language === "en" ? "Outline Node" : "当前节点" },
+          { heading: "## Must Keep", label: language === "en" ? "Keep" : "保留" },
+          { heading: "## Must Avoid", label: language === "en" ? "Avoid" : "避免" },
+          { heading: "## Style Emphasis", label: language === "en" ? "Style" : "风格" },
+          { heading: "## Structured Directives", label: language === "en" ? "Directives" : "指令" },
+        ];
 
   const rendered = sections
     .map(({ heading, label }) => {
@@ -123,11 +143,11 @@ export function buildNarrativeIntentBrief(
 
 export function renderNarrativeSelectedContext(
   entries: ReadonlyArray<ContextPackage["selectedContext"][number]>,
-  language: "zh" | "en" = "zh",
+  language: "zh" | "en" | "ru" = "zh",
 ): string {
-  const heading = language === "en" ? "Evidence" : "证据";
-  const reasonLabel = language === "en" ? "reason" : "原因";
-  const detailLabel = language === "en" ? "detail" : "细节";
+  const heading = language === "en" ? "Evidence" : language === "ru" ? "Доказательство" : "证据";
+  const reasonLabel = language === "en" ? "reason" : language === "ru" ? "причина" : "原因";
+  const detailLabel = language === "en" ? "detail" : language === "ru" ? "деталь" : "细节";
 
   return entries
     .map((entry, index) => {
@@ -143,7 +163,7 @@ export function renderNarrativeSelectedContext(
 
 export function sanitizeNarrativeEvidenceBlock(
   block: string | undefined,
-  language: "zh" | "en" = "zh",
+  language: "zh" | "en" | "ru" = "zh",
 ): string | undefined {
   if (!block) return undefined;
   const withoutSources = block.replace(

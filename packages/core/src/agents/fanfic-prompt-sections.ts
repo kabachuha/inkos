@@ -1,5 +1,7 @@
 import type { FanficMode } from "../models/book.js";
 
+export type FanficPromptLanguage = "zh" | "en" | "ru";
+
 const MODE_PREAMBLES: Record<FanficMode, string> = {
   canon: `你正在写**原作向同人**。严格遵守正典：
 - 角色的语癖、说话风格、行为模式必须与原作一致
@@ -23,10 +25,44 @@ const MODE_PREAMBLES: Record<FanficMode, string> = {
 - 关系发展应有节奏感：推进、试探、阻碍、突破`,
 };
 
+const MODE_PREAMBLES_RU: Record<FanficMode, string> = {
+  canon: `Ты пишешь **канон-фейтфил**. Строго соблюдай канон:
+- Речевые тики, стиль речи и поведенческие паттерны персонажей должны совпадать с оригиналом
+- Правила мира нарушать нельзя
+- Хронология ключевых событий не должна противоречить оригиналу
+- Допустимо заполнять пробелы оригинала и исследовать недетализированные стороны`,
+
+  au: `Ты пишешь **AU (параллельный мир) фанфик**:
+- Правила мира можно менять (отклонения, объявленные в allowedDeviations)
+- Ядро характера и манера речи персонажей должны оставаться узнаваемыми — читатель должен понять, кто это
+- Отклонения AU-сеттинга должны быть внутренне непротиворечивы (поменял одно правило — меняй все связанные)`,
+
+  ooc: `Ты пишешь **OOC-фанфик**:
+- В экстремальных обстоятельствах персонаж может отклоняться от ядра характера
+- Но отклонение должно иметь ситуативную причину, нельзя менять характер просто так
+- Сохраняй речевые тики и речевые особенности персонажа — даже если характер изменился, манера речи должна оставаться узнаваемой`,
+
+  cp: `Ты пишешь **CP-фанфик**, в центре — взаимодействие персонажей и развитие отношений:
+- Обе стороны пары должны иметь содержательное взаимодействие в каждой главе
+- Во взаимодействии должна быть химия — не два человека, каждый занят своим в одной сцене
+- Развитие отношений должно иметь ритм: продвижение, пробы, препятствия, прорыв`,
+};
+
 export function buildFanficCanonSection(
   fanficCanon: string,
   mode: FanficMode,
+  language: FanficPromptLanguage = "zh",
 ): string {
+  if (language === "ru") {
+    return `
+## Справочный канон фанфика
+
+${MODE_PREAMBLES_RU[mode]}
+
+Ниже — каноническая информация оригинала, на которую обязательно опираться при написании:
+
+${fanficCanon}`;
+  }
   return `
 ## 同人正典参照
 
@@ -37,16 +73,25 @@ ${MODE_PREAMBLES[mode]}
 ${fanficCanon}`;
 }
 
-export function buildCharacterVoiceProfiles(fanficCanon: string): string {
-  // Extract character table from fanfic_canon.md
+export function buildCharacterVoiceProfiles(
+  fanficCanon: string,
+  language: FanficPromptLanguage = "zh",
+): string {
+  const isRu = language === "ru";
+  // Extract character table from fanfic_canon.md (zh and RU canon layouts)
   const tableMatch = fanficCanon.match(
-    /## 角色档案[\s\S]*?\n(\|[^\n]+\|\n\|[-|\s]+\|\n(?:\|[^\n]+\|\n)*)/,
+    isRu
+      ? /## Досье персонажей[\s\S]*?\n(\|[^\n]+\|\n\|[-|\s]+\|\n(?:\|[^\n]+\|\n)*)/
+      : /## 角色档案[\s\S]*?\n(\|[^\n]+\|\n\|[-|\s]+\|\n(?:\|[^\n]+\|\n)*)/,
   );
   if (!tableMatch) return "";
 
+  const headerSkip = isRu ? "| Персонаж" : "| 角色";
+  const none = isRu ? "(в материале не упомянуто)" : "（素材未提及）";
+
   const rows = tableMatch[1]!
     .split("\n")
-    .filter((line) => line.startsWith("|") && !line.startsWith("|--") && !line.startsWith("| 角色"))
+    .filter((line) => line.startsWith("|") && !line.startsWith("|--") && !line.startsWith(headerSkip))
     .map((line) =>
       line
         .split("|")
@@ -60,19 +105,26 @@ export function buildCharacterVoiceProfiles(fanficCanon: string): string {
   const profiles = rows.map((cells) => {
     const [name, , , catchphrases, speakingStyle, behavior] = cells;
     const parts: string[] = [`### ${name}`];
-    if (catchphrases && catchphrases !== "（素材未提及）") {
-      parts.push(`- 口头禅/语癖：${catchphrases}`);
+    if (catchphrases && catchphrases !== none) {
+      parts.push(`- ${isRu ? "Речевые тики:" : "口头禅/语癖："}${catchphrases}`);
     }
-    if (speakingStyle && speakingStyle !== "（素材未提及）") {
-      parts.push(`- 说话风格：${speakingStyle}`);
+    if (speakingStyle && speakingStyle !== none) {
+      parts.push(`- ${isRu ? "Стиль речи:" : "说话风格："}${speakingStyle}`);
     }
-    if (behavior && behavior !== "（素材未提及）") {
-      parts.push(`- 典型行为：${behavior}`);
+    if (behavior && behavior !== none) {
+      parts.push(`- ${isRu ? "Типичное поведение:" : "典型行为："}${behavior}`);
     }
     return parts.join("\n");
   });
 
-  return `
+  return isRu
+    ? `
+## Голоса персонажей (только для фанфик-написания)
+
+Диалоги и поведение перечисленных ниже персонажей должны опираться на черты оригинала. Прежде чем писать реплику, сначала подумай: «как этот персонаж сказал бы это в оригинале?».
+
+${profiles.join("\n\n")}`
+    : `
 ## 角色语音参照（同人写作专用）
 
 以下角色的对话和行为必须参照原作特征。写对话时，先想"这个角色在原作里会怎么说"。
@@ -94,10 +146,34 @@ const MODE_CHECKS: Record<FanficMode, string> = {
 - 互动质量检查：互动是否有化学反应（不是各干各的）？`,
 };
 
+const MODE_CHECKS_RU: Record<FanficMode, string> = {
+  canon: `- Проверка канон-соответствия: нарушает ли глава сеттинг оригинала? Соответствуют ли реплики персонажей их речевым тикам из оригинала?
+- Проверка границ информации: не использует ли персонаж сведения, которые он знать не должен?`,
+
+  au: `- Список AU-отклонений: какие правила мира изменены в этой главе? Изменения внутренне непротиворечивы?
+- Проверка узнаваемости: сможет ли читатель узнать персонажа по репликам?`,
+
+  ooc: `- Запись OOC-отклонений: в чём персонаж отклонился от ядра характера? Какова причина отклонения?
+- Проверка сохранения речевых тиков: даже при OOC сохраняет ли манера речи черты оригинала?`,
+
+  cp: `- Проверка CP-взаимодействия: было ли содержательное взаимодействие обеих сторон пары в этой главе? Продвинулись ли отношения?
+- Проверка качества взаимодействия: есть ли химия (а не два человека каждый в своей жизни)?`,
+};
+
 export function buildFanficModeInstructions(
   mode: FanficMode,
   allowedDeviations: ReadonlyArray<string>,
+  language: FanficPromptLanguage = "zh",
 ): string {
+  if (language === "ru") {
+    const deviationsBlock = allowedDeviations.length > 0
+      ? `\nДопустимые отклонения (не считаются нарушением):\n${allowedDeviations.map((d) => `- ${d}`).join("\n")}\n`
+      : "";
+    return `
+## Самопроверка фанфика (дополнительные проверки в PRE_WRITE_CHECK)
+
+${MODE_CHECKS_RU[mode]}${deviationsBlock}`;
+  }
   const deviationsBlock = allowedDeviations.length > 0
     ? `\n允许的偏离（不视为违规）：\n${allowedDeviations.map((d) => `- ${d}`).join("\n")}\n`
     : "";

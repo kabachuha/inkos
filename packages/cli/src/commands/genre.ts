@@ -39,27 +39,52 @@ auditDimensions: [1,2,3,6,7,8,9,10,13,14,15,16,17,18,19]
 `;
   }
 
+  if (language === "ru") {
+    return `---
+ name: ${params.name}
+ id: ${params.id}
+ language: ru
+ chapterTypes: ["развитие", "завязка", "переход", "развязка"]
+ fatigueWords: ["встремясь", "неоспоримо", "очевидно"]
+ numericalSystem: ${params.numerical}
+ powerScaling: ${params.power}
+ eraResearch: ${params.era}
+ pacingRule: "Ясный прогресс или награда каждые 2-3 главы"
+ satisfactionTypes: ["цель достигнута", "преодоление препятствия", "правда раскрыта"]
+ auditDimensions: [1,2,3,6,7,8,9,10,13,14,15,16,17,18,19]
+ ---
+
+ ## Запреты жанра
+
+ - (добавьте запреты для этого жанра)
+
+ ## Нарративное руководство
+
+ (опишите нарративный фокус и стилистические требования этого жанра)
+ `;
+  }
+
   return `---
-name: ${params.name}
-id: ${params.id}
-chapterTypes: ["推进章", "布局章", "过渡章", "回收章"]
-fatigueWords: ["震惊", "不可思议", "难以置信"]
-numericalSystem: ${params.numerical}
-powerScaling: ${params.power}
-eraResearch: ${params.era}
-pacingRule: "每2-3章有一个明确的进展或反馈"
-satisfactionTypes: ["目标达成", "困难克服", "真相揭示"]
-auditDimensions: [1,2,3,6,7,8,9,10,13,14,15,16,17,18,19]
----
+ name: ${params.name}
+ id: ${params.id}
+ chapterTypes: ["推进章", "布局章", "过渡章", "回收章"]
+ fatigueWords: ["震惊", "不可思议", "难以置信"]
+ numericalSystem: ${params.numerical}
+ powerScaling: ${params.power}
+ eraResearch: ${params.era}
+ pacingRule: "每2-3章有一个明确的进展或反馈"
+ satisfactionTypes: ["目标达成", "困难克服", "真相揭示"]
+ auditDimensions: [1,2,3,6,7,8,9,10,13,14,15,16,17,18,19]
+ ---
 
-## 题材禁忌
+ ## 题材禁忌
 
-- (根据题材添加禁忌)
+ - (根据题材添加禁忌)
 
-## 叙事指导
+ ## 叙事指导
 
-(根据题材描述叙事重心和风格要求)
-`;
+ (根据题材描述叙事重心和风格要求)
+ `;
 }
 
 export const genreCommand = new Command("genre")
@@ -132,7 +157,7 @@ genreCommand
   .option("--numerical", "Enable numerical system", false)
   .option("--power", "Enable power scaling", false)
   .option("--era", "Enable era research", false)
-  .option("--lang <language>", "Template language: zh or en (defaults to INKOS_LOCALE/LANG, then zh)")
+  .option("--lang <language>", "Template language: zh, en or ru (defaults to INKOS_LOCALE/LANG, then zh)")
   .action(async (id: string, opts) => {
     try {
       const root = findProjectRoot();

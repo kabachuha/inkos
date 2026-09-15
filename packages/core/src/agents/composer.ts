@@ -55,7 +55,7 @@ export interface ContextBudget {
 export interface CompressibleContextCompileRequest {
   readonly chapterNumber: number;
   readonly goal: string;
-  readonly language: "zh" | "en";
+  readonly language: "zh" | "en" | "ru";
   readonly maxInputTokens: number;
   readonly protectedEntries: ContextPackage["selectedContext"];
   readonly compressibleEntries: ContextPackage["selectedContext"];
@@ -69,7 +69,7 @@ export interface OutlineSectionSelectionRequest {
   readonly chapterNumber: number;
   readonly goal: string;
   readonly outlineNode: string;
-  readonly language: "zh" | "en";
+  readonly language: "zh" | "en" | "ru";
   readonly candidates: ReadonlyArray<{
     readonly source: string;
     readonly heading: string;
@@ -160,7 +160,7 @@ async function applyContextBudgetIfNeeded(params: {
   readonly contextPackage: ContextPackage;
   readonly chapterNumber: number;
   readonly goal: string;
-  readonly language: "zh" | "en";
+  readonly language: "zh" | "en" | "ru";
   readonly contextBudget?: ContextBudget;
   readonly compiler?: CompressibleContextCompiler;
   readonly onContextCompression?: ContextCompressionCallback;
@@ -395,6 +395,7 @@ export class ComposerAgent extends BaseAgent {
       return request.candidates.map((candidate) => candidate.source);
     }
     const isEn = request.language === "en";
+    const isRu = request.language === "ru";
     const candidates = request.candidates.map((candidate, index) => [
       `#${index + 1} ${candidate.source}`,
       `heading: ${candidate.heading}`,
@@ -406,11 +407,17 @@ export class ComposerAgent extends BaseAgent {
           "Select only the outline sections needed for the current chapter. Prefer semantic relevance over keyword overlap.",
           "Return strict JSON only: {\"selectedSources\":[\"...\"]}. Use exact source ids from the candidates. If uncertain, include the safest relevant anchors rather than inventing ids.",
         ].join("\n")
-      : [
-          "你是 InkOS 的语义大纲选段器。",
-          "只选择当前章节真正需要的大纲段落。按语义相关性判断，不要按关键词重合机械选择。",
-          "只返回严格 JSON：{\"selectedSources\":[\"...\"]}。必须使用候选里的精确 source id；不确定时选最安全的相关锚点，不要编造 id。",
-        ].join("\n");
+      : isRu
+        ? [
+            "Вы — семантический селектор разделов плана InkOS.",
+            "Выбирайте только разделы плана, действительно нужные для текущей главы. Опирайтесь на смысловую релевантность, а не на пересечение ключевых слов.",
+            "Верните строго JSON: {\"selectedSources\":[\"...\"]}. Используйте точные source id из кандидатов; при сомнении выбирайте самые безопасные релевантные якоря, не выдумывайте id.",
+          ].join("\n")
+        : [
+            "你是 InkOS 的语义大纲选段器。",
+            "只选择当前章节真正需要的大纲段落。按语义相关性判断，不要按关键词重合机械选择。",
+            "只返回严格 JSON：{\"selectedSources\":[\"...\"]}。必须使用候选里的精确 source id；不确定时选最安全的相关锚点，不要编造 id。",
+          ].join("\n");
     const user = isEn
       ? [
           `File: ${request.fileName}`,
@@ -421,15 +428,25 @@ export class ComposerAgent extends BaseAgent {
           "Candidates:",
           candidates,
         ].join("\n")
-      : [
-          `文件：${request.fileName}`,
-          `章节：第${request.chapterNumber}章`,
-          `目标：${request.goal}`,
-          `大纲节点：${request.outlineNode}`,
-          "",
-          "候选段落：",
-          candidates,
-        ].join("\n");
+      : isRu
+        ? [
+            `Файл: ${request.fileName}`,
+            `Глава: ${request.chapterNumber}`,
+            `Цель: ${request.goal}`,
+            `Узел плана: ${request.outlineNode}`,
+            "",
+            "Кандидаты:",
+            candidates,
+          ].join("\n")
+        : [
+            `文件：${request.fileName}`,
+            `章节：第${request.chapterNumber}章`,
+            `目标：${request.goal}`,
+            `大纲节点：${request.outlineNode}`,
+            "",
+            "候选段落：",
+            candidates,
+          ].join("\n");
     const response = await this.chat([
       { role: "system", content: system },
       { role: "user", content: user },
@@ -443,6 +460,7 @@ export class ComposerAgent extends BaseAgent {
 
   async selectReferenceSections(request: ReferenceSectionSelectionRequest): Promise<ReadonlyArray<string>> {
     const isEn = request.language === "en";
+    const isRu = request.language === "ru";
     const candidates = request.candidates.map((candidate, index) => [
       `#${index + 1} ${candidate.source}`,
       `title: ${candidate.title}`,
@@ -457,12 +475,19 @@ export class ComposerAgent extends BaseAgent {
           "Select only sections useful for the current chapter task. References are creative guidance, never canon and never stronger than author intent or established facts.",
           "Return strict JSON only: {\"selectedSources\":[\"...\"]}. Use exact candidate source ids. An empty list is valid when no section is relevant.",
         ].join("\n")
-      : [
-          "你是 InkOS 的参考资产语义选段器。",
-          "用户已把这些参考资产绑定到本书，并明确说明每份资料可以借鉴什么。",
-          "只选择当前章节任务真正需要的段落。参考资料只是创作借鉴，不能成为正典，也不能压过作者意图和既成事实。",
-          "只返回严格 JSON：{\"selectedSources\":[\"...\"]}。必须使用候选中的精确 source id；没有相关段落时可以返回空数组。",
-        ].join("\n");
+      : isRu
+        ? [
+            "Вы — семантический селектор разделов референсных материалов InkOS.",
+            "Пользователь явно привязал эти референсные материалы к книге и описал, что допустимо взять из каждого.",
+            "Выбирайте только разделы, полезные для задачи текущей главы. Референсы — творческое вдохновение, а не канон; они не сильнее авторского замысла и установленных фактов.",
+            "Верните строго JSON: {\"selectedSources\":[\"...\"]}. Используйте точные source id кандидатов. Пустой список допустим, если ни один раздел не релевантен.",
+          ].join("\n")
+        : [
+            "你是 InkOS 的参考资产语义选段器。",
+            "用户已把这些参考资产绑定到本书，并明确说明每份资料可以借鉴什么。",
+            "只选择当前章节任务真正需要的段落。参考资料只是创作借鉴，不能成为正典，也不能压过作者意图和既成事实。",
+            "只返回严格 JSON：{\"selectedSources\":[\"...\"]}。必须使用候选中的精确 source id；没有相关段落时可以返回空数组。",
+          ].join("\n");
     const user = isEn
       ? [
           `Chapter: ${request.chapterNumber}`,
@@ -473,15 +498,25 @@ export class ComposerAgent extends BaseAgent {
           "Candidates (headings only; selected sections will be loaded verbatim by the host):",
           candidates,
         ].join("\n")
-      : [
-          `章节：第${request.chapterNumber}章`,
-          `目标：${request.goal}`,
-          `大纲节点：${request.outlineNode}`,
-          `必须保留：${request.mustKeep.join("；") || "（无）"}`,
-          "",
-          "候选段落（这里只给标题；宿主会把选中的段落原文完整载入）：",
-          candidates,
-        ].join("\n");
+      : isRu
+        ? [
+            `Глава: ${request.chapterNumber}`,
+            `Цель: ${request.goal}`,
+            `Узел плана: ${request.outlineNode}`,
+            `Обязательно сохранить: ${request.mustKeep.join("; ") || "(нет)"}`,
+            "",
+            "Кандидаты (только заголовки; выбранные разделы хост загрузит дословно):",
+            candidates,
+          ].join("\n")
+        : [
+            `章节：第${request.chapterNumber}章`,
+            `目标：${request.goal}`,
+            `大纲节点：${request.outlineNode}`,
+            `必须保留：${request.mustKeep.join("；") || "（无）"}`,
+            "",
+            "候选段落（这里只给标题；宿主会把选中的段落原文完整载入）：",
+            candidates,
+          ].join("\n");
     const response = await this.chat([
       { role: "system", content: system },
       { role: "user", content: user },
@@ -495,6 +530,7 @@ export class ComposerAgent extends BaseAgent {
 
   async compileCompressibleContext(request: CompressibleContextCompileRequest): Promise<string> {
     const isEn = request.language === "en";
+    const isRu = request.language === "ru";
     const protectedBlock = renderContextEntries(request.protectedEntries);
     const compressibleBlock = renderContextEntries(request.compressibleEntries);
     const system = isEn
@@ -503,11 +539,17 @@ export class ComposerAgent extends BaseAgent {
           "Only compile the COMPRESSIBLE CONTEXT. The PROTECTED CONTEXT is binding reference material and must not be rewritten, summarized as a substitute, or weakened.",
           "Output concise Markdown with source pointers. Preserve names, unresolved promises, evidence, timing, and constraints that may affect the next chapter. Drop low-relevance noise.",
         ].join("\n")
-      : [
-          "你是 InkOS 的语义上下文编译器。",
-          "只能编译【可压缩上下文】。【受保护上下文】是绑定参照，不得改写、不得替代总结、不得削弱。",
-          "输出简洁 Markdown，保留来源指针。保留会影响下一章的人名、未兑现承诺、证据、时间点和约束，丢弃低相关噪声。",
-        ].join("\n");
+      : isRu
+        ? [
+            "Вы — компилятор семантического контекста InkOS.",
+            "Компилируйте только СЖИМАЕМЫЙ КОНТЕКСТ. ЗАЩИЩЁННЫЙ КОНТЕКСТ — обязательный референс: его нельзя переписывать, подменять суммаризацией или ослаблять.",
+            "Выдайте краткий Markdown с указателями на источники. Сохраняйте имена, невыполненные обещания, улики, тайминги и ограничения, которые могут повлиять на следующую главу. Убирайте шум низкой релевантности.",
+          ].join("\n")
+        : [
+            "你是 InkOS 的语义上下文编译器。",
+            "只能编译【可压缩上下文】。【受保护上下文】是绑定参照，不得改写、不得替代总结、不得削弱。",
+            "输出简洁 Markdown，保留来源指针。保留会影响下一章的人名、未兑现承诺、证据、时间点和约束，丢弃低相关噪声。",
+          ].join("\n");
     const user = isEn
       ? [
           `Chapter: ${request.chapterNumber}`,
@@ -520,17 +562,29 @@ export class ComposerAgent extends BaseAgent {
           "## Compressible Context (compile this)",
           compressibleBlock || "(none)",
         ].join("\n")
-      : [
-          `章节：第${request.chapterNumber}章`,
-          `目标：${request.goal}`,
-          `压缩后目标预算：不超过 ${request.maxInputTokens} 估算输入 tokens`,
-          "",
-          "## 受保护上下文（只作为参照，不要编译它）",
-          protectedBlock || "（无）",
-          "",
-          "## 可压缩上下文（只编译这一部分）",
-          compressibleBlock || "（无）",
-        ].join("\n");
+      : isRu
+        ? [
+            `Глава: ${request.chapterNumber}`,
+            `Цель: ${request.goal}`,
+            `Бюджет сжатого контекста: не более ${request.maxInputTokens} оценочных входных tokens`,
+            "",
+            "## Защищённый контекст (только как референс, не компилировать)",
+            protectedBlock || "(нет)",
+            "",
+            "## Сжимаемый контекст (компилируйте только эту часть)",
+            compressibleBlock || "(нет)",
+          ].join("\n")
+        : [
+            `章节：第${request.chapterNumber}章`,
+            `目标：${request.goal}`,
+            `压缩后目标预算：不超过 ${request.maxInputTokens} 估算输入 tokens`,
+            "",
+            "## 受保护上下文（只作为参照，不要编译它）",
+            protectedBlock || "（无）",
+            "",
+            "## 可压缩上下文（只编译这一部分）",
+            compressibleBlock || "（无）",
+          ].join("\n");
 
     const response = await this.chat([
       { role: "system", content: system },
@@ -572,7 +626,7 @@ export function contextBudgetFromClient(client: LLMClient): ContextBudget | unde
 async function collectSelectedContext(
   storyDir: string,
   plan: PlanChapterOutput,
-  language: "zh" | "en",
+  language: "zh" | "en" | "ru",
   outlineSectionSelector?: OutlineSectionSelector,
   memorySemanticSelector?: MemorySemanticSelector,
 ): Promise<{
@@ -822,7 +876,7 @@ async function buildHookDebtEntries(
       readonly payoffTiming?: string;
       readonly notes: string;
     }>,
-  language: "zh" | "en",
+  language: "zh" | "en" | "ru",
 ): Promise<ContextPackage["selectedContext"]> {
     const targetHookIds = [...new Set(plan.memo.threadRefs)];
     if (targetHookIds.length === 0) {
@@ -841,8 +895,12 @@ async function buildHookDebtEntries(
 
       const seedSummary = findHookSummary(summaries, hook.hookId, hook.startChapter, "seed");
       const latestSummary = findHookSummary(summaries, hook.hookId, hook.lastAdvancedChapter, "latest");
-      const role = language === "en" ? "memo-referenced debt" : "备忘引用旧债";
-      const promise = hook.expectedPayoff || (language === "en" ? "(unspecified)" : "（未写明）");
+      const role = language === "en"
+        ? "memo-referenced debt"
+        : language === "ru"
+          ? "долг, упомянутый в мемо"
+          : "备忘引用旧债";
+      const promise = hook.expectedPayoff || (language === "en" ? "(unspecified)" : language === "ru" ? "(не указано)" : "（未写明）");
       const seedBeat = seedSummary
         ? renderHookDebtBeat(seedSummary)
         : (hook.notes || promise);
@@ -855,7 +913,9 @@ async function buildHookDebtEntries(
         source: `runtime/hook_debt#${hook.hookId}`,
         reason: language === "en"
           ? "Narrative debt brief with original seed text for this hook agenda target."
-          : "含原始种子文本的叙事债务简报。",
+          : language === "ru"
+            ? "Бриф нарративного долга с исходным текстом зерна для этой цели."
+            : "含原始种子文本的叙事债务简报。",
         excerpt: language === "en"
           ? [
               `${hook.hookId} (${hook.type}, ${role}, open ${age} chapters)`,
@@ -863,12 +923,19 @@ async function buildHookDebtEntries(
               `original seed (ch${hook.startChapter}): ${seedBeat}`,
               latestBeat ? `latest turn (ch${hook.lastAdvancedChapter}): ${latestBeat}` : undefined,
             ].filter(Boolean).join(" | ")
-          : [
-              `${hook.hookId}（${hook.type}，${role}，已开${age}章）`,
-              `读者承诺：${promise}`,
-              `种于第${hook.startChapter}章：${seedBeat}`,
-              latestBeat ? `推进于第${hook.lastAdvancedChapter}章：${latestBeat}` : undefined,
-            ].filter(Boolean).join(" | "),
+          : language === "ru"
+            ? [
+                `${hook.hookId} (${hook.type}, ${role}, открыт ${age} глав)`,
+                `обещание читателю: ${promise}`,
+                `зачато в гл. ${hook.startChapter}: ${seedBeat}`,
+                latestBeat ? `последний ход (гл. ${hook.lastAdvancedChapter}): ${latestBeat}` : undefined,
+              ].filter(Boolean).join(" | ")
+            : [
+                `${hook.hookId}（${hook.type}，${role}，已开${age}章）`,
+                `读者承诺：${promise}`,
+                `种于第${hook.startChapter}章：${seedBeat}`,
+                latestBeat ? `推进于第${hook.lastAdvancedChapter}章：${latestBeat}` : undefined,
+              ].filter(Boolean).join(" | "),
       }];
     });
 }
@@ -911,7 +978,7 @@ async function maybeOutlineSectionSources(
   reason: string,
   plan: PlanChapterOutput,
   kind: "story-frame" | "volume-map",
-  language: "zh" | "en",
+  language: "zh" | "en" | "ru",
   outlineSectionSelector?: OutlineSectionSelector,
 ): Promise<ContextPackage["selectedContext"]> {
     const path = join(storyDir, fileName);
@@ -950,7 +1017,7 @@ async function selectOutlineSectionEntries(params: {
   readonly reason: string;
   readonly plan: PlanChapterOutput;
   readonly kind: "story-frame" | "volume-map";
-  readonly language: "zh" | "en";
+  readonly language: "zh" | "en" | "ru";
   readonly outlineSectionSelector?: OutlineSectionSelector;
 }): Promise<ContextPackage["selectedContext"]> {
     const sections = splitMarkdownSections(params.content);
@@ -1127,6 +1194,9 @@ function extractMatchTerms(value: string): string[] {
     for (const term of normalized.match(/[\u4e00-\u9fff]{2,}/g) ?? []) {
       terms.add(term);
     }
+    for (const term of normalized.match(/[\u0400-\u04ff]{3,}/g) ?? []) {
+      terms.add(term);
+    }
     return [...terms].filter((term) => term.length >= 2);
 }
 
@@ -1139,6 +1209,8 @@ function headingMentionsChapter(normalizedHeading: string, chapterNumber: number
       || normalizedHeading.includes(`chapter${chapterNumber}`)
       || normalizedHeading.includes(`ch.${chapterNumber}`)
       || normalizedHeading.includes(`ch${chapterNumber}`)
+      || normalizedHeading.includes(`глава ${chapterNumber}`)
+      || normalizedHeading.includes(`глава${chapterNumber}`)
       || normalizedHeading.includes(`第${chapterNumber}章`);
 }
 
@@ -1146,7 +1218,7 @@ function slugifyAnchor(value: string): string {
     return value
       .trim()
       .toLowerCase()
-      .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
+      .replace(/[^a-z0-9\u4e00-\u9fff\u0400-\u04ff]+/g, "-")
       .replace(/^-+|-+$/g, "")
       || "section";
 }
@@ -1170,7 +1242,7 @@ function toFactAnchor(predicate: string): string {
     return predicate
       .trim()
       .toLowerCase()
-      .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
+      .replace(/[^a-z0-9\u4e00-\u9fff\u0400-\u04ff]+/g, "-")
       .replace(/^-+|-+$/g, "")
       || "fact";
 }

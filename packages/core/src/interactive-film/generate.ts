@@ -24,7 +24,7 @@ export async function generateStoryGraph(
   input: GenerateStoryGraphInput,
   options?: {
     readonly maxTokens?: number;
-    readonly language?: "zh" | "en";
+    readonly language?: "zh" | "en" | "ru";
     readonly activatedSkills?: ReadonlyArray<ActivatedSkillGuidance>;
     readonly signal?: AbortSignal;
   },

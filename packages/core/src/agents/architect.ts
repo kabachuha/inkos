@@ -140,16 +140,22 @@ export class ArchitectAgent extends BaseAgent {
     const powerBlock = gp.powerScaling ? "- 有明确的战力等级体系" : "";
     const eraBlock = gp.eraResearch ? "- 需要年代考据支撑（在 story_frame 中织入时代锚，在 book_rules 中写清不可违背的年代限制）" : "";
 
-    const systemPrompt = resolvedLanguage === "en"
-      ? this.buildEnglishFoundationPrompt(book, gp, genreBody, contextBlock, reviewFeedbackBlock, numericalBlock, powerBlock, eraBlock)
-      : this.buildChineseFoundationPrompt(book, gp, genreBody, contextBlock, reviewFeedbackBlock, numericalBlock, powerBlock, eraBlock);
+    const systemPrompt = resolvedLanguage === "ru"
+      ? this.buildRussianFoundationPrompt(book, gp, genreBody, contextBlock, reviewFeedbackBlock, numericalBlock, powerBlock, eraBlock)
+      : resolvedLanguage === "en"
+        ? this.buildEnglishFoundationPrompt(book, gp, genreBody, contextBlock, reviewFeedbackBlock, numericalBlock, powerBlock, eraBlock)
+        : this.buildChineseFoundationPrompt(book, gp, genreBody, contextBlock, reviewFeedbackBlock, numericalBlock, powerBlock, eraBlock);
 
     const langPrefix = resolvedLanguage === "en"
       ? `【LANGUAGE OVERRIDE】ALL output (story_frame, volume_map, roles, book_rules, pending_hooks) MUST be written in English. Character names, place names, and all prose must be in English. The === SECTION: === tags remain unchanged. Do NOT emit rhythm_principles or current_state sections — rhythm principles live inside the last paragraph of volume_map; environment/era anchors (when relevant) are woven into story_frame's world-tonal-ground paragraph.\n\n`
-      : "";
+      : resolvedLanguage === "ru"
+        ? `【ПЕРЕОПРЕДЕЛЕНИЕ ЯЗЫКА】Весь вывод (story_frame, volume_map, roles, book_rules, pending_hooks) ОБЯЗАН быть написан на русском языке. Имена персонажей, названия мест и весь текст — на русском. Теги === SECTION: === остаются без изменений. НЕ выдавай отдельные секции rhythm_principles или current_state — принципы ритма живут в последнем абзаце volume_map; якоря среды/эпохи (когда уместны) вплетаются в абзац мирового тона story_frame.\n\n`
+        : "";
     const userMessage = resolvedLanguage === "en"
       ? `Generate the complete foundation for a ${gp.name} novel titled "${book.title}". Write everything in English.`
-      : `请为标题为"${book.title}"的${gp.name}小说生成完整基础设定。`;
+      : resolvedLanguage === "ru"
+        ? `Сгенерируй полный фундамент романа «${book.title}» жанра ${gp.name}. Пиши всё на русском языке.`
+        : `请为标题为"${book.title}"的${gp.name}小说生成完整基础设定。`;
 
     const response = await this.chat([
       { role: "system", content: langPrefix + systemPrompt + revisePrompt },
@@ -599,14 +605,212 @@ Rules:
 - **Do NOT emit rhythm_principles or current_state as separate sections** — rhythm principles live in the last paragraph of volume_map; character initial status goes in roles.Current_State; initial hooks go in pending_hooks (start_chapter=0 rows); environment / era anchors (only when the genre has a real year) are woven into story_frame's world-tonal-ground paragraph
 - **pending_hooks table MUST carry Phase 7 extended columns — depends_on spells out the causal chain, pays_off_in_arc locks the approximate payoff location, core_hook marks main-line load-bearing hooks (3-7 per book), half_life only on priority hooks**
 
-## Hard completeness check (read before generating)
-You MUST emit all **5 SECTION blocks in order**: story_frame → volume_map → roles → book_rules → pending_hooks. Do NOT stop after story_frame or volume_map just because they ran long. Even if roles lists only 3 characters, book_rules is a small Markdown block, and pending_hooks has only 3 rows, all five must appear. The output is only considered delivered after the last row of pending_hooks is written.`;
+    ## Hard completeness check (read before generating)
+    You MUST emit all **5 SECTION blocks in order**: story_frame → volume_map → roles → book_rules → pending_hooks. Do NOT stop after story_frame or volume_map just because they ran long. Even if roles lists only 3 characters, book_rules is a small Markdown block, and pending_hooks has only 3 rows, all five must appear. The output is only considered delivered after the last row of pending_hooks is written.`;
+  }
+
+  private buildRussianFoundationPrompt(
+    book: BookConfig,
+    gp: GenreProfile,
+    genreBody: string,
+    contextBlock: string,
+    reviewFeedbackBlock: string,
+    numericalBlock: string,
+    powerBlock: string,
+    eraBlock: string,
+  ): string {
+    return `Ты — архитектор этой книги. Твоя единственная задача — создать **фундамент в прозе плотной ткани** — не таблицы, не схемы, не списки пунктов. Душа книги исходит из плотности твоей прозы: planner третьего этапа читает из твоего volume_map разреженные memo только если он написан прозой до уровня глав; писатель создаёт живых персонажей только потому, что твои карточки ролей несут контрастные детали; рецензент ловит жёсткие ошибки только потому, что твой story_frame задал тональные якоря.${contextBlock}${reviewFeedbackBlock}
+
+## Метаданные книги
+- Платформа: ${book.platform}
+- Жанр: ${gp.name} (${book.genre})
+- Целевое число глав: ${book.targetChapters}
+- Длина главы: ${book.chapterWordCount}
+- Название: ${book.title}
+
+## Тело жанра
+${genreBody}
+
+## Ограничения вывода
+${numericalBlock}
+${powerBlock}
+${eraBlock}
+
+## Контракт вывода (5 блоков === SECTION: ===)
+
+## Правило дедупликации (ОБЯЗАТЕЛЬНО)
+Не дублируй один и тот же факт между секциями. Дуга героя живёт только в roles; жёсткие правила мира — только в story_frame; принципы ритма — только в последнем абзаце volume_map; начальное состояние персонажей — только в roles.Текущее_состояние; начальные крючки — только в pending_hooks (строки start_chapter=0). **Когда книга — историческая / фанфик о прошлом / городское перерождение** — всё, что привязано к реальному году, сезону или исторической вехе, — вплети якорь среды/эпохи в абзац мирового тона story_frame (например, «июль 1985, сразу после волны SARS»). **Для жанров культивации / высокого фэнтези / систем, где нет реального года, пропусти полностью** — не выдумывай якорь эпохи. Если секция повторяет содержание, принадлежащее другой, удали его.
+
+## Бюджет вывода (сверх бюджета — сокращать)
+- story_frame ≤ 3000 символов
+- volume_map ≤ 5000 символов
+- roles ≤ 8000 символов суммарно
+- book_rules ≤ 1000 символов (обычная Markdown-карта правил)
+- pending_hooks ≤ 2000 символов
+
+=== SECTION: story_frame ===
+
+Четыре прозаических блока, по ~600-900 символов каждый. Без таблиц. Без списков пунктов. Настоящие абзацы. **НЕ пиши здесь полную дугу героя** — она принадлежит roles/主要角色/<герой>.md. Используй однострочный указатель внутри этого блока (например, «Герой — X; полная дуга лежит в roles/主要角色/X.md»).
+
+## 01_Тема_и_тон_основания
+О чём эта книга на самом деле — не «герой растёт из слабого в сильного» (пусто), а конкретный тезис. Затем тональное основание: тёплое / холодное / яростное / суровое — какое именно, и почему это, а не другое. В конце — однострочный указатель на карточку героя.
+
+## 02_Ядерный_конфликт_и_слои_сюжета_переднего_и_заднего_плана
+Главное напряжение книги — не «добро против зла», а «потому что А верит X, а B верит Y, они неизбежно столкнутся в Z». Минимум два противника: один видимый, один структурный/системный. У противников есть своя логика.
+
+**В этом блоке явно прописать слои переднего сюжета / заднего сюжета**:
+- **Передний сюжет**: поверхностный конфликт, который читатель видит каждую главу (расследование, бои, прокачка, романтика, деловые шаги). У каждого тома / арки — своя видимая цель и точка закрытия.
+- **Задний сюжет**: скрытая машина, работающая через всю книгу — кукловод, заговор, тайна происхождения, системное давление, предопределённое проклятие. Читатель собирает её из фрагментов; полный payoff наступает ближе к финалу.
+
+Два слоя должны быть связаны причинно, а не быть параллельными вселенными — каждый передний конфликт должен вести к какому-то шестерёнке заднего механизма. **Только передний сюжет рассыпается в набор разрозненных эпизодов без тяги вперёд; только задний — удушающий и не приносит удовлетворения. Прописать оба в прозе здесь и назвать, как они сцеплены.**
+
+## 03_Мировой_тон_основания (жёсткие правила + сенсорная фактура + правила книги)
+Рабочие правила мира. 3-5 незаслуженных законов, прописанных прозой, а не пунктами. Сенсорная фактура: влажный или сухой, быстрый или медленный, шумный или тихий — дай писателю якорь. **Этот абзац также поглощает нарративную прозу, которая раньше жила в book_rules (нарративная перспектива, драйвер ядерного конфликта, правила книги).** Написать всё здесь один раз. Не повторять в book_rules.
+
+## 04_Направление_финала_и_Цель_книги
+Каково примерно ощущение последней главы. Последний кадр: где, что делает, с кем, о чём думает. Дальний ориентир для всех планировочных вызовов ниже.
+
+**Завершить этот абзац однострочной Целью книги** (корнем рекурсивного OKR-контура): когда эта книга будет написана, герой должен достичь **проверяемого конечного состояния** (например, «возвыситься из послушника-прислужника до старейшины секты и публично оправдать дело родителей», «перейти от бездокументного работника к руководству тремя шкуроторговыми компаниями и лично отправить бывшую жену в тюрьму»). НЕ использовать размытые слова вроде «стать сильнее» или «отомстить» — написать конкретное состояние, которое внешний наблюдатель может проверить: «достигнуто / не достигнуто». Эта Цель книги — корень OKR-контура всей книги; volume_map ниже разложит её по томам.
+
+=== SECTION: volume_map ===
+
+Прозаическая карта томов, **5 блоков + 1 закрывающий абзац ритма**. **Критическое требование: держаться только на уровне тома в прозе** — указать тему каждого тома, эмоциональную кривую, межтомные крючки, стадийные цели персонажей и необратимые изменения конца тома. **НЕ назначать задач на уровне глав** (никакого «в главе 17 он едет домой»). Планирование глав — работа planner третьего этапа; архитектор строит скелет, а не список глав.
+
+## 01_Темы_томов_и_эмоциональные_кривые
+Сколько томов? Тема каждого тома в одном предложении; эмоциональная кривая каждого тома абзацем (где давление, где награда, где холодно, где тепло). Не механическая ротация.
+
+## 02_Межтомные_крючки_и_обещания_payoff (покрыть ОБА слоя переднего и заднего плана)
+Том 1 сажает крючок A, payoff в томе N; том 2 сажает крючок B, payoff в томе M. Проза, не таблицы. **Держаться на уровне тома** (например, «тайна происхождения, заложенная в томе 1, раскрывается в томе 3»); не указывать номера глав.
+
+**Крючки должны покрывать ОБА слоя переднего и заднего плана** (в соответствии с двухслойным сюжетом, установленным в story_frame.02):
+- Передние крючки: короткие арочные крючки (тайна дела, личность противника, схватка за ресурс), payoff в пределах 1-2 томов
+- Задние крючки: сквозные крючки главной линии (окончательная истина, происхождение, системная тайна), payoff ближе к финалу. 3-7 несущих — core_hook=true
+
+**Если этот абзац несёт только передние крючки без задних семян, ты потерял ось тяги книги. Добавь их.**
+
+## 03_OKR_по_томам (Objective + 3 Key Results)
+Рекурсивный OKR-контур, раскладывающий Цель книги (корневой O, заданный в конце story_frame.04): каждый том должен явно указывать:
+- **Objective (томовая цель)**: **проверяемое состояние**, которого герой должен достичь к концу тома, одним предложением, логически сцепленным с Целью книги (например, если Цель книги = «стать старейшиной секты и оправдать дело родителей», то O тома 1 = «перейти из прислужников в реестр официальных учеников и восстановить первую зацепку, указывающую на правду»)
+- **Key Results (3 пункта, измеримые / наблюдаемые)**: три конкретных под-достижения, завершение которых можно проверить внешнему наблюдателю (например, KR1 = «занять место смотрителя аптекарского сада», KR2 = «закрепить устойчивый союз с Пиком Линань», KR3 = «обнаружить первый полустраничный фрагмент дела родителей»). Никаких размытых KR вроде «становится сильнее» / «созревает».
+
+Стадийные изменения второстепенных персонажей (учитель умирает в конце тома 2, противник озлобляется в томе 3) — как примечания под соответствующим KR. Только стадия — полная дуга живёт в roles. **3 KR на том — прямой вход для planner: увидев 3 KR тома, он расставляет задачи глав примерно с шагом один KR на каждые 3-5 глав.**
+
+## 04_Обязательные_изменения_конца_тома
+Последняя глава каждого тома должна содержать необратимое событие. Проза, один абзац на том. **Писать, что должно произойти, а не в какой главе.**
+
+## 05_Принципы_ритма (конкретные + универсальные)
+**Это единственное жилище принципов ритма — отдельной секции rhythm_principles не существует.** Вывести 6 принципов ритма. **Минимум 3 должны быть конкретизированы для этой книги** (например, «каждые 5 глав из первых 30 — один маленький payoff»); остальные могут остаться универсальными правилами (например, «без deus ex machina», «залоги зацепок за 3-5 глав до кульминации»). Смесь конкретных + универсальных допустима. Плохо: «ритм должен балансировать напряжение и разрядку». Хорошо: «каждые 5 глав из первых 30 несут маленький payoff, приходящийся на последние 300 символов главы». Покрывать (порядок гибкий, замены равного веса допустимы): (1) интервал кульминаций, (2) частота дыхания, (3) плотность крючков, (4) темп раскрытия информации, (5) ритм payoff, (6) продвижение отношений — по 2-3 предложения на каждый.
+
+Если внешние инструкции задают пропорции контента (например, политика/романтика 50/50 или вес карьеры/отношений), этот абзац обязан превратить это в сквозное ритмическое обещание книги: какие тома тяготеют к какой линии, какая линия должна быть видна в каждом мини-цикле 3-5 глав, и какая линия несёт последствия после кульминаций. Не просто «сохранять баланс».
+
+=== SECTION: roles ===
+
+Один файл на персонажа, проза. **Карточка героя — единственный источник истины для дуги героя** — story_frame её больше не несёт, и writer/planner оба читают её здесь.
+
+---ROLE---
+tier: major
+name: <имя персонажа>
+---CONTENT---
+## Ключевые_ярлыки
+(3-5 ярлыков + одно предложение, почему именно эти)
+
+## Контрастная_деталь
+(1-2 конкретных детали, противоречащих ключевым ярлыкам — «ледяной убийца, но оставляет рыбьи кости для уличных кошек». Контрастная деталь — формула объёмности персонажа.)
+
+## Предыстория
+(Прозаический абзац — как этот человек стал тем, кем является. Только ключевое прошлое, держать тонко.)
+
+## Дуга_героя (старт → финиш → цена)
+**Обязательно для героя; опционально для других основных с существенными дугами.** Откуда он стартует (идентичность, ситуация, ключевой порок, начальное желание); куда приходит (кем становится, что получает или теряет); необратимая цена, которую он платит за этот приход. Показывать внутреннее смещение, а не только рост. Этот блок поглощает то, что раньше жило в story_frame.02.
+
+## Текущее_состояние (начальное состояние в главе 0)
+(Где он в главе 0, что на уме, недавнее беспокойство. **Только персонаж**: начальные крючки — в строках pending_hooks start_chapter=0; якоря среды / эпохи (когда у жанра есть реальный год) вплетены в абзац мирового тона story_frame. Отдельная секция current_state не создаётся.)
+
+## Сеть_отношений
+(С героем, с другими основными персонажами. По одной строке. Отношения динамичны, не ярлыки.)
+
+## Внутренний_двигатель
+(Чего хочет, почему, что готов платить.)
+
+## Дуга_роста
+(Внутреннее смещение через книгу. Может быть коротким для не-героев.)
+
+---ROLE---
+tier: major
+name: <следующий основной>
+---CONTENT---
+...
+
+(Целевое: 2-3 основных + 2-3 поддерживающих основных. Качество важнее количества — не раздувать.)
+
+---ROLE---
+tier: minor
+name: <имя второстепенного>
+---CONTENT---
+(Упрощённая: только 4 блока — Ключевые_ярлыки / Контрастная_деталь / Текущее_состояние / Отношение_к_герою, по 1-2 строки.)
+
+(3-5 второстепенных.)
+
+=== SECTION: book_rules ===
+
+Выводить обычный Markdown. НЕ выводить YAML frontmatter, JSON или заборы кода. Это компактная карта правил, читаемая и рантаймом, и писателями; длинное нарративное руководство уже живёт в story_frame.03.
+
+## Герой
+- Имя: <имя героя>
+- Лок личности: <3-5 ключевых слов личности, через запятую>
+- Поведенческие ограничения: <3-5 поведенческих границ>
+
+## Лок жанра
+- Основной: ${book.genre}
+- Запрещено: <2-3 запрещённых вторжений стиля/системы>
+
+## Лицо повествования
+<Писать первое или третье лицо ТОЛЬКО если пользователь явно запросил; иначе писать «none» (нет).>
+
+${gp.numericalSystem ? `## Числовые / ресурсные правила
+- Базовые ресурсы: <типы базовых ресурсов>
+- Жёсткий предел: <предел, специфичный для сеттинга, который сюжет не может сломать>` : ""}
+
+${gp.eraResearch ? `## Ограничения эпохи
+- <2-3 ограничения, связанные с политикой, ценами, технологиями или социальной средой>` : ""}
+
+## Запреты
+- <3-5 специфичных для книги запретов>
+
+=== SECTION: pending_hooks ===
+
+Начальный пул крючков (таблица Markdown), расширенные столбцы Phase 7:
+| hook_id | start_chapter | type | status | last_advanced_chapter | expected_payoff | payoff_timing | depends_on | pays_off_in_arc | core_hook | half_life | notes |
+
+Правила:
+- Столбец 5 — чистый номер главы, не нарративное описание
+- При создании книги у всех запланированных крючков last_advanced_chapter = 0
+- Обычные семенные строки не должны использовать статус «open»; использовать «deferred», пока проза фактически не продвинет их. Только несущие ядро / зависимости / межтомные крючки могут быть предварительно продвинуты рантаймом в активный долг крючков
+- Столбец 7 должен быть: immediate / near-term / mid-arc / slow-burn / endgame
+- Столбец 8 (depends_on): id крючков-предков, которые должны быть засеяны / раскрыты раньше этого, в формате [H003, H007]; писать «none», если предков нет
+- Столбец 9 (pays_off_in_arc): свободная проза о том, где этот крючок запланирован к раскрытию (например, «середина тома 2», «прямо перед финалом»). НЕ разбирается в номерах глав
+- Столбец 10 (core_hook): true / false. Ключевые крючки — несущие главную линию (центральный секрет, идентичность, ключевое обещание). В книге обычно 3-7 ключевых; всё остальное false
+- Столбец 11 (half_life): опциональное целое число глав. Если пусто — выводится из payoff_timing (immediate/near-term = 10, mid-arc = 30, slow-burn/endgame = 80)
+- Начальный текст сигнала — в notes, не в столбце 5
+- **Начальное состояние мира / альянса**: любое несущее начальное условие («герой несёт блокнот отца», «режим уже наблюдает за пристанью») может быть засеяно как строка start_chapter=0 с тегом в столбце notes, указывающим его начальный характер.
+
+## Финальный акцент
+- Соответствовать вкусам платформы ${book.platform} и чертам жанра ${gp.name}
+- Личность героя ясна с чёткими поведенческими границами
+- Крючки засеяны с обещаниями payoff; второстепенные персонажи имеют независимую мотивацию
+- **story_frame / volume_map / roles должны быть прозой плотной ткани — без деградации в списки**
+- **book_rules — обычная Markdown-карта правил — без YAML, JSON, забора кода или длинной прозы**
+- **НЕ выдавать rhythm_principles или current_state как отдельные секции** — принципы ритма живут в последнем абзаце volume_map; начальное состояние персонажей — в roles.Текущее_состояние; начальные крючки — в pending_hooks (строки start_chapter=0); якоря среды / эпохи (только когда жанр привязан к реальному году) вплетены в абзац мирового тона story_frame
+- **Таблица pending_hooks ОБЯЗАНА нести расширенные столбцы Phase 7 — depends_on разворачивает причинную цепь, pays_off_in_arc фиксирует приблизительное место payoff, core_hook помечает несущие главную линию крючки (3-7 на книгу), half_life только на приоритетных крючках**
+
+## Жёсткая проверка полноты (прочитать перед генерацией)
+Ты ОБЯЗАН вывести все **5 блоков SECTION по порядку**: story_frame → volume_map → roles → book_rules → pending_hooks. НЕ останавливайся после story_frame или volume_map просто потому, что они длиннели. Даже если в roles только 3 персонажа, book_rules — маленький Markdown-блок, а pending_hooks — 3 строки, все пять должны присутствовать. Считается доставленным только после написания последней строки pending_hooks.`;
   }
 
   // -------------------------------------------------------------------------
   // Parsing
   // -------------------------------------------------------------------------
-  private async parseSectionsWithRepair(content: string, language: "zh" | "en"): Promise<ArchitectOutput> {
+  private async parseSectionsWithRepair(content: string, language: "zh" | "en" | "ru"): Promise<ArchitectOutput> {
     try {
       return this.parseSections(content, language);
     } catch (error) {
@@ -620,13 +824,17 @@ You MUST emit all **5 SECTION blocks in order**: story_frame → volume_map → 
       } catch (repairError) {
         if (repairError instanceof MissingArchitectSectionsError) {
           const missing = repairError.missing.join("、");
-          const message = language === "en"
-            ? `The story foundation came back incomplete (missing: ${repairError.missing.join(", ")}). `
-              + "This usually means the model didn't write every section in one pass — it's not a problem with your input. "
-              + "Try again, or switch to a stronger model (e.g. deepseek-v4-pro / gpt-5.5) and regenerate."
-            : `基础设定没有生成完整(缺少:${missing})。`
-              + "这通常是模型一次没把所有部分写全,不是你的输入有问题。"
-              + "点重试,或换更强的模型(如 deepseek-v4-pro / gpt-5.5)再生成一次,通常就能解决。";
+          const message = language === "ru"
+            ? `Фундамент истории вернулся неполным (отсутствуют: ${repairError.missing.join(", ")}). `
+              + "Обычно это значит, что модель не написала все секции за один проход — проблема не в твоём вводе. "
+              + "Попробуй ещё раз или переключись на более сильную модель (например, deepseek-v4-pro / gpt-5.5) и сгенерируй заново."
+            : language === "en"
+              ? `The story foundation came back incomplete (missing: ${repairError.missing.join(", ")}). `
+                + "This usually means the model didn't write every section in one pass — it's not a problem with your input. "
+                + "Try again, or switch to a stronger model (e.g. deepseek-v4-pro / gpt-5.5) and regenerate."
+              : `基础设定没有生成完整(缺少:${missing})。`
+                + "这通常是模型一次没把所有部分写全,不是你的输入有问题。"
+                + "点重试,或换更强的模型(如 deepseek-v4-pro / gpt-5.5)再生成一次,通常就能解决。";
           throw new ArchitectIncompleteFoundationError(
             repairError.missing,
             repairError.content,
@@ -640,29 +848,40 @@ You MUST emit all **5 SECTION blocks in order**: story_frame → volume_map → 
 
   private async repairMissingSections(
     error: MissingArchitectSectionsError,
-    language: "zh" | "en",
+    language: "zh" | "en" | "ru",
   ): Promise<string> {
     const missingList = error.missing.join(", ");
-    const system = language === "en"
+    const system = language === "ru"
       ? [
-          "You repair InkOS architect output formatting.",
-          "The previous draft is partially useful but is missing required SECTION blocks.",
-          "Do not invent a new book. Preserve usable existing content and add the missing parts.",
-          "Return the complete output with exactly these 5 SECTION blocks in order: story_frame, volume_map, roles, book_rules, pending_hooks.",
-          "book_rules must be ordinary Markdown, not YAML. pending_hooks must be a Markdown table.",
-          "Do not explain the repair.",
+          "Ты чинишь формат вывода InkOS architect.",
+          "Предыдущая черновик частично полезен, но в нём отсутствуют требуемые блоки SECTION.",
+          "Не выдумывай новую книгу. Сохрани имеющееся пригодное содержимое и добавь недостающие части.",
+          "Верни полный вывод ровно с этими 5 блоками SECTION в порядке: story_frame, volume_map, roles, book_rules, pending_hooks.",
+          "book_rules должен быть обычным Markdown, не YAML. pending_hooks должна быть Markdown-таблицей.",
+          "Не объясняй процесс починки.",
         ].join("\n")
-      : [
-          "你负责修复 InkOS architect 的输出格式。",
-          "上一轮草稿有可用内容，但缺少必需的 SECTION 块。",
-          "不要重新发明一本书；保留已有可用内容，只补齐缺失部分并整理成完整输出。",
-          "必须按顺序返回完整 5 段 SECTION：story_frame、volume_map、roles、book_rules、pending_hooks。",
-          "book_rules 必须是普通 Markdown，不要 YAML；pending_hooks 必须是 Markdown 表格。",
-          "不要解释修复过程。",
-        ].join("\n");
-    const user = language === "en"
-      ? `Missing sections: ${missingList}\n\nOriginal partial output:\n\n${error.content}`
-      : `缺失 section：${missingList}\n\n原始不完整输出如下：\n\n${error.content}`;
+      : language === "en"
+        ? [
+            "You repair InkOS architect output formatting.",
+            "The previous draft is partially useful but is missing required SECTION blocks.",
+            "Do not invent a new book. Preserve usable existing content and add the missing parts.",
+            "Return the complete output with exactly these 5 SECTION blocks in order: story_frame, volume_map, roles, book_rules, pending_hooks.",
+            "book_rules must be ordinary Markdown, not YAML. pending_hooks must be a Markdown table.",
+            "Do not explain the repair.",
+          ].join("\n")
+        : [
+            "你负责修复 InkOS architect 的输出格式。",
+            "上一轮草稿有可用内容，但缺少必需的 SECTION 块。",
+            "不要重新发明一本书；保留已有可用内容，只补齐缺失部分并整理成完整输出。",
+            "必须按顺序返回完整 5 段 SECTION：story_frame、volume_map、roles、book_rules、pending_hooks。",
+            "book_rules 必须是普通 Markdown，不要 YAML；pending_hooks 必须是 Markdown 表格。",
+            "不要解释修复过程。",
+          ].join("\n");
+    const user = language === "ru"
+      ? `Отсутствующие секции: ${missingList}\n\nПервоначальный частичный вывод:\n\n${error.content}`
+      : language === "en"
+        ? `Missing sections: ${missingList}\n\nOriginal partial output:\n\n${error.content}`
+        : `缺失 section：${missingList}\n\n原始不完整输出如下：\n\n${error.content}`;
 
     const response = await this.chat([
       { role: "system", content: system },
@@ -671,7 +890,7 @@ You MUST emit all **5 SECTION blocks in order**: story_frame → volume_map → 
     return response.content;
   }
 
-  private parseSections(content: string, language: "zh" | "en"): ArchitectOutput {
+  private parseSections(content: string, language: "zh" | "en" | "ru"): ArchitectOutput {
     const parsedSections = this.parseArchitectSectionMap(content);
 
     // Phase 5 new sections take precedence.
@@ -817,19 +1036,25 @@ You MUST emit all **5 SECTION blocks in order**: story_frame → volume_map → 
     return roles;
   }
 
-  private buildStoryBibleShim(language: "zh" | "en"): string {
+  private buildStoryBibleShim(language: "zh" | "en" | "ru"): string {
+    if (language === "ru") {
+      return `# Story Bible (совместимый указатель — устарело)\n\n> Этот файл сохранён только для внешних читателей. Авторитетный источник теперь:\n> - outline/story_frame.md (тема / тональное основание / ядерный конфликт / правила мира / финал)\n> - outline/volume_map.md (карта сюжета с гранулярностью глав)\n> - каталог roles/ (по одному файлу на персонажа)\n`;
+    }
     if (language === "en") {
       return `# Story Bible (compat pointer — deprecated)\n\n> This file is kept for external readers only. The authoritative source is now:\n> - outline/story_frame.md (theme / tonal ground / core conflict / world rules / endgame)\n> - outline/volume_map.md (chapter-granular plot map)\n> - roles/ directory (one-file-per-character sheets)\n`;
     }
     return `# 故事圣经（兼容指针——已废弃）\n\n> 本文件仅为外部读取保留。权威来源已迁移至：\n> - outline/story_frame.md（主题 / 基调 / 核心冲突 / 世界铁律 / 终局）\n> - outline/volume_map.md（章级别的分卷地图）\n> - roles/ 文件夹（一人一卡角色档案）\n`;
   }
 
-  private buildCharacterMatrixShim(roles: ReadonlyArray<ArchitectRole>, language: "zh" | "en"): string {
+  private buildCharacterMatrixShim(roles: ReadonlyArray<ArchitectRole>, language: "zh" | "en" | "ru"): string {
     const majorLines = roles.filter((role) => role.tier === "major")
       .map((role) => `- roles/主要角色/${role.name}.md`);
     const minorLines = roles.filter((role) => role.tier === "minor")
       .map((role) => `- roles/次要角色/${role.name}.md`);
 
+    if (language === "ru") {
+      return `# Матрица персонажей (совместимый указатель — устарело)\n\n> Этот файл сохранён только для внешних читателей. Авторитетный источник теперь — каталог roles/ (по одному файлу на персонажа).\n\n## Основные персонажи\n\n${majorLines.join("\n") || "(нет)"}\n\n## Второстепенные персонажи\n\n${minorLines.join("\n") || "(нет)"}\n`;
+    }
     if (language === "en") {
       return `# Character Matrix (compat pointer — deprecated)\n\n> This file is kept for external readers only. Authoritative source is now the roles/ directory (one-file-per-character).\n\n## Major characters\n\n${majorLines.join("\n") || "(none)"}\n\n## Minor characters\n\n${minorLines.join("\n") || "(none)"}\n`;
     }
@@ -843,7 +1068,7 @@ You MUST emit all **5 SECTION blocks in order**: story_frame → volume_map → 
     bookDir: string,
     output: ArchitectOutput,
     _numericalSystem: boolean = true,
-    language: "zh" | "en" = "zh",
+    language: "zh" | "en" | "ru" = "zh",
     mode: "init" | "revise" = "init",
   ): Promise<void> {
     const storyDir = join(bookDir, "story");
@@ -1103,7 +1328,12 @@ ${continuationDirective}
   ): Promise<ArchitectOutput> {
     const { profile: gp, body: genreBody } =
       await readGenreProfile(this.ctx.projectRoot, book.genre);
-    const reviewFeedbackBlock = this.buildReviewFeedbackBlock(reviewFeedback, book.language ?? "zh");
+    const resolvedLanguage = book.language ?? gp.language;
+    const reviewFeedbackBlock = this.buildReviewFeedbackBlock(reviewFeedback, resolvedLanguage);
+
+    if (resolvedLanguage === "ru") {
+      return this.generateRussianFanficFoundation(book, gp, genreBody, fanficCanon, fanficMode, reviewFeedbackBlock);
+    }
 
     const MODE_INSTRUCTIONS: Record<FanficMode, string> = {
       canon: "剧情发生在原作空白期或未详述的角度。不可改变原作已确立的事实。",
@@ -1149,7 +1379,62 @@ ${genreBody}
       },
     ], { temperature: 0.7 });
 
-    return this.parseSectionsWithRepair(response.content, book.language ?? "zh");
+    return this.parseSectionsWithRepair(response.content, resolvedLanguage);
+  }
+
+  private async generateRussianFanficFoundation(
+    book: BookConfig,
+    gp: GenreProfile,
+    genreBody: string,
+    fanficCanon: string,
+    fanficMode: FanficMode,
+    reviewFeedbackBlock: string,
+  ): Promise<ArchitectOutput> {
+    const MODE_INSTRUCTIONS_RU: Record<FanficMode, string> = {
+      canon: "Действие происходит в незаполненных промежутках оригинала или с недетализированных ракурсов. Установленные оригиналом факты менять запрещено.",
+      au: "Отметь ключевые точки расхождения AU-сеттинга с оригиналом; после расхождения мир развивается свободно. Сохрани ядро характеров персонажей.",
+      ooc: "Отметь точку начала отклонения характера персонажа и событие-драйвер. Отклонение должно иметь логическую причину.",
+      cp: "Строй карту томов вокруг линии отношений пары. В каждом томе обязателен узел продвижения отношений.",
+    };
+
+    const systemPrompt = `Ты — профессиональный фанфик-архитектор. На основе канона оригинала сгенерируй фундамент фанфика с плотностью прозы.
+
+## Режим фанфика: ${fanficMode}
+${MODE_INSTRUCTIONS_RU[fanficMode]}
+
+## Требования к новому пространству
+Для этого фанфика необходимо спроектировать ОРИГИНАЛЬНОЕ нарративное пространство, а не пересказывать сюжет оригинала:
+1. Ясная точка расхождения — в story_frame обязательно отметь, с какого узла оригинала ответвляется эта работа
+2. Независимый центральный конфликт — центральный конфликт volume_map должен быть оригинальным
+3. Взрыв за 5 глав
+4. Свежесть сцен ≥ 50%
+${reviewFeedbackBlock}
+
+## Канон оригинала
+${fanficCanon}
+
+## Цвет жанра
+${genreBody}
+
+## Контракт вывода
+Строго выведи 5 блоков === SECTION: ===: story_frame / volume_map / roles / book_rules / pending_hooks. **НЕ выводй rhythm_principles и current_state**: принципы ритма объединяй в последний абзац volume_map; начальное состояние персонажей пиши в roles.текущее_состояние, начальные хуки — в pending_hooks на строках startChapter=0; якоря среды/эпохи (только если оригинал/работа привязаны к реальным годам) вплетай в абзац мирового тона story_frame, в остальных случаях пропускай.
+
+- Главные персонажи должны быть взяты из канона оригинала
+- Допустимы оригинальные второстепенные персонажи, помечай их как «оригинал»
+- book_rules — обычная Markdown-карта правил; обязательно укажи режим фанфика: ${fanficMode}
+- Длинные прозаические правила пиши в мировом тоне story_frame, в book_rules оставляй только исполнимые правила: протагонист, жанровая фиксация, режим фанфика, запреты
+- Дуга протагониста пишется только в roles/главные_персонажи/<протагонист>.md, не дублируй её в story_frame
+- Все outline-разделы должны быть с плотностью прозы`;
+
+    const response = await this.chat([
+      { role: "system", content: systemPrompt },
+      {
+        role: "user",
+        content: `Сгенерируй фундамент фанфика режима ${fanficMode} для романа «${book.title}». Пиши всё на русском языке. Цель — ${book.targetChapters} глав, ${book.chapterWordCount} слов в главе.`,
+      },
+    ], { temperature: 0.7 });
+
+    return this.parseSectionsWithRepair(response.content, "ru");
   }
 
   // -------------------------------------------------------------------------
@@ -1157,7 +1442,7 @@ ${genreBody}
   // -------------------------------------------------------------------------
   private buildReviewFeedbackBlock(
     reviewFeedback: string | undefined,
-    language: "zh" | "en",
+    language: "zh" | "en" | "ru",
   ): string {
     const trimmed = reviewFeedback?.trim();
     if (!trimmed) return "";
@@ -1165,6 +1450,13 @@ ${genreBody}
     if (language === "en") {
       return `\n\n## Previous Review Feedback
 The previous foundation draft was rejected. You must explicitly fix the following issues in this regeneration instead of paraphrasing the same design:
+
+${trimmed}\n`;
+    }
+
+    if (language === "ru") {
+      return `\n\n## Предыдущая обратная связь рецензии
+Черновик фундамента не прошёл рецензию. При этой перегенерации ты обязан явно исправить следующие проблемы, а не перефразировать тот же дизайн:
 
 ${trimmed}\n`;
     }
@@ -1278,7 +1570,11 @@ ${trimmed}\n`;
       return section;
     }
 
-    const language: "zh" | "en" = /[\u4e00-\u9fff]/.test(section) ? "zh" : "en";
+    const language: "zh" | "en" | "ru" = /[\u4e00-\u9fff]/.test(section)
+      ? "zh"
+      : /[\u0400-\u04FF]/.test(section)
+        ? "ru"
+        : "en";
     const normalizedHooks = dataRows.map((row, index) => {
       const rawProgress = row[4] ?? "";
       const normalizedProgress = this.parseHookChapterNumber(rawProgress);
@@ -1342,15 +1638,15 @@ ${trimmed}\n`;
   }
 
   /**
-   * Parse `第N卷 (A-B章)` / `Volume N (chapters A-B)` headers from the
-   * architect's volume_map prose. Best-effort: missing / unparseable blocks
+   * Parse `第N卷 (A-B章)` / `Volume N (chapters A-B)` / `Том N (главы A-B)` headers
+   * from the architect's volume_map prose. Best-effort: missing / unparseable blocks
    * return an empty list and cross-volume promotion simply never fires.
    */
   private parseVolumeBoundariesForPromotion(raw: string): ReadonlyArray<VolumeBoundary> {
     if (!raw) return [];
     const lines = raw.split("\n");
-    const volumeHeader = /^(第[一二三四五六七八九十百千万零〇\d]+卷|Volume\s+\d+)/i;
-    const rangePattern = /[（(]\s*(?:第|[Cc]hapters?\s+)?(\d+)\s*[-–~～—]\s*(\d+)\s*(?:章)?\s*[）)]|(?:第|[Cc]hapters?\s+)(\d+)\s*[-–~～—]\s*(\d+)\s*(?:章)?/i;
+    const volumeHeader = /^(第[一二三四五六七八九十百千万零〇\d]+卷|Volume\s+\d+|Том\s+\d+)/i;
+    const rangePattern = /[（(]\s*(?:第|[Cc]hapters?\s+|главы?\s+)?(\d+)\s*[-–~～—]\s*(\d+)\s*(?:章|главы?)?\s*[）)]|(?:第|[Cc]hapters?\s+|главы?\s+)(\d+)\s*[-–~～—]\s*(\d+)\s*(?:章|главы?)?/i;
 
     const volumes: VolumeBoundary[] = [];
     for (const rawLine of lines) {
@@ -1370,12 +1666,13 @@ ${trimmed}\n`;
     return volumes;
   }
 
-  private normalizeDormantSeedStatus(status: string | undefined, language: "zh" | "en"): string {
+  private normalizeDormantSeedStatus(status: string | undefined, language: "zh" | "en" | "ru"): string {
     const normalized = status?.trim().toLowerCase() ?? "";
+    const fallback = language === "zh" ? "暂缓" : language === "ru" ? "отложен" : "deferred";
     if (!normalized || /^(open|opened|active)$/i.test(normalized)) {
-      return language === "zh" ? "暂缓" : "deferred";
+      return fallback;
     }
-    return status?.trim() || (language === "zh" ? "暂缓" : "deferred");
+    return status?.trim() || fallback;
   }
 
   private parseHookChapterNumber(value: string | undefined): number {
@@ -1399,7 +1696,7 @@ ${trimmed}\n`;
   private parseBooleanCell(value: string | undefined): boolean {
     const normalized = (value ?? "").trim().toLowerCase();
     if (!normalized) return false;
-    return /^(true|yes|y|是|核心|core|1|✓|✔)$/.test(normalized);
+    return /^(true|yes|y|是|核心|core|1|✓|✔|да|истина|центральный|основной)$/.test(normalized);
   }
 
   private parseOptionalInt(value: string | undefined): number | undefined {
@@ -1414,10 +1711,10 @@ ${trimmed}\n`;
   private hasNarrativeProgress(value: string | undefined): boolean {
     const normalized = (value ?? "").trim().toLowerCase();
     if (!normalized) return false;
-    return !["0", "none", "n/a", "na", "-", "无", "未推进"].includes(normalized);
+    return !["0", "none", "n/a", "na", "-", "无", "未推进", "нет", "не продвинуто"].includes(normalized);
   }
 
-  private mergeHookNotes(notes: string, seedNote: string, language: "zh" | "en"): string {
+  private mergeHookNotes(notes: string, seedNote: string, language: "zh" | "en" | "ru"): string {
     const trimmedNotes = notes.trim();
     const trimmedSeed = seedNote.trim();
     if (!trimmedSeed) {

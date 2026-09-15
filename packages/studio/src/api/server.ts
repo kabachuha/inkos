@@ -4689,6 +4689,8 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
       const surfaceLanguage = agentBookId
         ? (bookLanguage ?? configLanguage)
         : (requestedLanguage ?? inferLanguage(instruction));
+      // Studio UI strings only exist in zh/en; ru books surface English UI copy.
+      const surfaceUiLanguage: StudioLanguage = surfaceLanguage === "zh" ? "zh" : "en";
       const streamSessionId = loadedBookSession.sessionId;
       const titleBeforeRun = bookSession.title;
       let sessionTitleBroadcasted = false;
@@ -4834,7 +4836,7 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
       if (confirmedIntent && confirmedTaskId) {
         const productionTaskBusyResponse = () => {
           const message = pick(
-            surfaceLanguage,
+            surfaceUiLanguage,
             "当前会话已有一个生产任务在运行，请等它完成，或先用停止按钮结束它，再发起新任务。",
             "A production task is already running in this session. Wait for it to finish, or stop it first, then start a new task.",
           );
@@ -4901,7 +4903,7 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
             actionPayload,
             requestedSkills,
             disabledSkills,
-            language: surfaceLanguage,
+            language: surfaceUiLanguage,
             taskId,
             sourceRequestId,
             signal: taskController.signal,
@@ -4919,7 +4921,7 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
             createdBookId = resolveCreatedBookIdFromToolExecs([exec]);
             if (createdBookId) {
               if (!await completeBookExists(join(root, "books", createdBookId))) {
-                const message = pick(surfaceLanguage, "创作工具返回了建书结果，但磁盘上的书籍工件不完整。", "The creation tool returned a book result, but the on-disk book artifact is incomplete.");
+                const message = pick(surfaceUiLanguage, "创作工具返回了建书结果，但磁盘上的书籍工件不完整。", "The creation tool returned a book result, but the on-disk book artifact is incomplete.");
                 bookCreateStatus.set(createdBookId, { status: "error", error: message });
                 broadcast("book:error", { bookId: createdBookId, sessionId: bookSession.sessionId, error: message });
                 throw new ApiError(500, "BOOK_CREATION_INCOMPLETE", message);
@@ -4944,7 +4946,7 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
             }
           }
 
-          const responseText = exec.result ?? pick(surfaceLanguage, "已完成。", "Done.");
+          const responseText = exec.result ?? pick(surfaceUiLanguage, "已完成。", "Done.");
           const responseForUser = suppressManualTextForTool(exec) ? "" : responseText;
           // 指令已在任务开始时写入 transcript，这里只补助手工具消息。
           await appendSessionMessagesUnlessDeleted(root, bookSession.sessionId, [
@@ -4968,7 +4970,7 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          const failure = formatAgentActionFailure(message, surfaceLanguage);
+          const failure = formatAgentActionFailure(message, surfaceUiLanguage);
           if (pendingBookId) {
             bookCreateStatus.set(pendingBookId, { status: "error", error: message });
             broadcast("book:error", { bookId: pendingBookId, sessionId: streamSessionId, error: message });
@@ -5022,7 +5024,7 @@ export function createStudioServer(initialConfig: ProjectConfig, root: string, o
           pipeline,
           ...(backgroundTask
             ? {
-                backgroundTaskContext: buildRunningTaskContextBlock(backgroundTask, surfaceLanguage),
+                backgroundTaskContext: buildRunningTaskContextBlock(backgroundTask, surfaceUiLanguage),
                 suppressProductionTools: true,
               }
             : {}),
