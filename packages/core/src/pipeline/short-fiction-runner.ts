@@ -66,7 +66,7 @@ export interface ShortFictionRunOptions {
   readonly storyId?: string;
   readonly outDir?: string;
   readonly chapterCount?: number;
-  // Per-chapter length in the language's native unit: zh characters or en words.
+  // Per-chapter length in the language's native unit: zh characters or en/ru words.
   readonly charsPerChapter?: number;
   readonly language?: ShortFictionLanguage;
   readonly cover?: boolean;
@@ -172,21 +172,21 @@ async function produceShort(
     SHORT_FICTION_MIN_CHAPTERS,
     SHORT_FICTION_MAX_CHAPTERS,
   );
-  // charsPerChapter is the language's native unit: zh chars (900-1200) or en words (600-800).
-  const charsPerChapter = language === "en"
+  // charsPerChapter is the language's native unit: zh chars (900-1200) or en/ru words (600-800).
+  const charsPerChapter = language === "zh"
     ? boundedInteger(
-        options.charsPerChapter,
-        SHORT_FICTION_EN_DEFAULT_WORDS_PER_CHAPTER,
-        "charsPerChapter",
-        SHORT_FICTION_EN_MIN_WORDS_PER_CHAPTER,
-        SHORT_FICTION_EN_MAX_WORDS_PER_CHAPTER,
-      )
-    : boundedInteger(
         options.charsPerChapter,
         SHORT_FICTION_DEFAULT_CHARS_PER_CHAPTER,
         "charsPerChapter",
         SHORT_FICTION_MIN_CHARS_PER_CHAPTER,
         SHORT_FICTION_MAX_CHARS_PER_CHAPTER,
+      )
+    : boundedInteger(
+        options.charsPerChapter,
+        SHORT_FICTION_EN_DEFAULT_WORDS_PER_CHAPTER,
+        "charsPerChapter",
+        SHORT_FICTION_EN_MIN_WORDS_PER_CHAPTER,
+        SHORT_FICTION_EN_MAX_WORDS_PER_CHAPTER,
       );
 
   // Resume the (3-stage) outline from disk if v002 already exists for this id —
@@ -257,15 +257,25 @@ async function produceShort(
             "",
             outlineRevisionWarning,
           ].join("\n")
-        : [
-            "# 第二版大纲未采用",
-            "",
-            "可用的第一版大纲继续生效；可选修订没有完整结束，系统没有用残缺输出覆盖它。",
-            "",
-            "## 原因",
-            "",
-            outlineRevisionWarning,
-          ].join("\n"));
+        : language === "ru"
+          ? [
+              "# Пересмотр плана не принят",
+              "",
+              "Полный первый план остаётся действующим, потому что необязательный пересмотр не завершился чисто.",
+              "",
+              "## Причина",
+              "",
+              outlineRevisionWarning,
+            ].join("\n")
+          : [
+              "# 第二版大纲未采用",
+              "",
+              "可用的第一版大纲继续生效；可选修订没有完整结束，系统没有用残缺输出覆盖它。",
+              "",
+              "## 原因",
+              "",
+              outlineRevisionWarning,
+            ].join("\n"));
     }
   }
 
@@ -344,15 +354,25 @@ async function produceShort(
             "",
             revisionWarning,
           ].join("\n")
-        : [
-            "# 第二轮改稿未采用",
-            "",
-            "系统没有用不完整或解析失败的改稿覆盖完整首稿。",
-            "",
-            "## 原因",
-            "",
-            revisionWarning,
-          ].join("\n"));
+        : language === "ru"
+          ? [
+              "# Вторая ревизия не принята",
+              "",
+              "Система отказалась перекрывать полный первый черновик неполной или нераспознаваемой ревизией.",
+              "",
+              "## Причина",
+              "",
+              revisionWarning,
+            ].join("\n")
+          : [
+              "# 第二轮改稿未采用",
+              "",
+              "系统没有用不完整或解析失败的改稿覆盖完整首稿。",
+              "",
+              "## 原因",
+              "",
+              revisionWarning,
+            ].join("\n"));
     }
 
     await writeFinalArtifacts(root, baseDir, finalDraft, language);
@@ -593,7 +613,9 @@ async function writePackageArtifacts(
   const finalDir = join(baseDir, "final");
   const headings = language === "en"
     ? { intro: "## Synopsis", sellingPoints: "## Selling Points", coverPrompt: "## Cover Prompt" }
-    : { intro: "## 简介", sellingPoints: "## 卖点", coverPrompt: "## 封面提示词" };
+    : language === "ru"
+      ? { intro: "## Синопсис", sellingPoints: "## Точки продаж", coverPrompt: "## Промпт обложки" }
+      : { intro: "## 简介", sellingPoints: "## 卖点", coverPrompt: "## 封面提示词" };
   const packageMarkdown = [
     `# ${salesPackage.title}`,
     "",
@@ -1065,6 +1087,31 @@ function buildCoverImagePrompt(
       "Cover direction: a platform short-fiction book cover, not a movie poster. The title lettering is the primary visual — reserve a large two-to-four-line type zone; character in close-up or half-body with a charged expression (cold smirk, shock, breakdown, menace, or payback); props few but large, telegraphing the conflict at a glance.",
       "High-contrast, high-saturation colors that read as a phone-list thumbnail. Avoid realistic corporate photography, landscape video thumbnails, magazine editorial looks, delicate thin lettering, and long runs of text.",
       "If the model's text rendering is unreliable, prioritize a clear title whitespace/type-block/layout zone instead of covering the canvas with garbled lettering.",
+    ].filter(Boolean).join("\n");
+  }
+
+  if (language === "ru") {
+    const base = [
+      `Заголовок: ${salesPackage.title}`,
+      salesPackage.intro ? `Синопсис: ${salesPackage.intro}` : "",
+      salesPackage.sellingPoints.length > 0 ? `Точки продаж: ${salesPackage.sellingPoints.join("; ")}` : "",
+      salesPackage.coverPrompt ? `Визуальные пожелания пользователя: ${salesPackage.coverPrompt}` : "",
+    ].filter(Boolean);
+
+    if (mode === "generic") {
+      return [
+        "Сгенерируй обложку по заголовку, синопсису, точкам продаж и визуальным пожеланиям, которые дал пользователь.",
+        ...base,
+      ].join("\n");
+    }
+
+    return [
+      "Сгенерируй книжную обложку в вертикальном мобильном формате для русского короткого рассказа, вертикаль 3:4.",
+      ...base.map((line) => line.replace(/^Заголовок: /u, "Основной заголовок: ").replace(/^Визуальные пожелания пользователя: /u, "Пакетные указания: ")),
+      "",
+      "Направление обложки: обложка платформенного короткого рассказа, а не киноафиша. Надпись с заголовком — главный визуал: оставь крупную типографскую зону на две-четыре строки; персонаж в крупном плане или в полуфигуре с напряжённым выражением (холодная ухмылка, шок, срыв, угроза или возмездие); реквизита мало, но крупно — конфликт считывается за один взгляд.",
+      "Высококонтрастные, насыщенные цвета, читающиеся как миниатюра в списке телефона. Избегай реалистичной деловой съёмки, горизонтальных видеоминиатюр, журнальной съёмки в большой форме, тонких изящных шрифтов и длинных текстовых блоков.",
+      "Если рендер текста модели ненадёжен, приоритет — чёткая зона отступа/типографского блока/раскладки для заголовка, а не заполнение кадра бессмысленными буквами.",
     ].filter(Boolean).join("\n");
   }
 
